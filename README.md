@@ -267,3 +267,8 @@ python3 generate_konjunktiv_modal_sentences.py --verify path/to/exercises.jsonl 
 | `generation_code/` | all scripts used to make and check the exercises (see above) |
 | `generation_code/reconstructed/` | rebuilt generator for Konjunktiv II and modal-verb sentences |
 | `README.md` | this file |
+| `LICENSE` | MIT license: free to use, change and share, with credit |
+
+## License
+
+[MIT](LICENSE): you're free to use, change and share this project, including the code and the exercise data, as long as you keep the copyright notice.
