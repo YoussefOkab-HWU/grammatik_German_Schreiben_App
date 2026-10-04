@@ -21,7 +21,33 @@ German sentence with the right word order, verb forms, cases and endings.
 - Ä / Ö / Ü / ß buttons and statistics on what you get right and wrong
 - Nothing to install: it is a single web page
 
-See screenshot.png for what an exercise looks like.
+See it in action:
+  media/demo.gif   24-second demo: typing a sentence (sped up), then the
+                   feedback and the word-by-word explanation
+  media/demo.mp4   the full recording (2 min 15 s, real speed)
+  media/screenshot.png   an exercise screen
+
+
+AI MODELS USED
+--------------
+1. Claude (by Anthropic), used through Claude Code
+   - wrote the original sentence set interactively (German sentence +
+     English translation for each category)
+   - designed the app and wrote all the Python scripts in generation_code/
+   There is no separate script for this first step: the sentences were
+   written directly in Claude Code sessions.
+
+2. Mistral Small (by Mistral AI, France) - 24 billion parameters, 4-bit
+   quantised (Q4_K_M), run locally with Ollama (https://ollama.com)
+   - wrote the explanation for every exercise
+   - added grammar details (case, gender, verb clusters, idioms ...)
+   - fixed every error the rule-based checkers found
+   - 17 of the scripts in generation_code/ use it (marked [AI])
+   Chosen because it is strong in European languages and fits on a
+   16 GB graphics card, so tens of thousands of calls cost nothing.
+
+3. No AI: rule-based Python checkers and two template generators
+   (see generation_code/ below).
 
 
 PLATFORM AND TESTING
@@ -115,7 +141,7 @@ fixed German grammar rules. Every sentence went through these steps:
 
 1. Writing the sentences
    The core sentence set (German sentence + English translation, per category)
-   was created with AI assistance during development.
+   was written by Claude (Anthropic) in Claude Code sessions.
    Two categories were built WITHOUT AI, from Python templates:
      - Dative of interest (500)
      - Verbs with fixed prepositions (476), built from a list of
@@ -133,15 +159,13 @@ fixed German grammar rules. Every sentence went through these steps:
    "bei meinem Friseur - bei always takes the dative."
 
    The model used for steps 2 and 3, and for fixing errors, is Mistral Small
-   (24 billion parameters) from the French company Mistral AI. It is strong in
-   European languages. It ran locally on my own computer through Ollama
-   (https://ollama.com), so tens of thousands of AI calls cost nothing.
+   (see "AI models used").
 
 4. Checking the grammar (rule-based, not AI)
    AI models make mistakes, so the output was checked with Python scripts that
    know hard grammar facts:
-     - Coverage: every word in the sentence must belong to a chip, including
-       correct umlauts.
+     - Coverage: the explanation must cover every word of the sentence,
+       including correct umlauts.
      - Cases:
          * Fixed-case prepositions are checked against a table:
            mit, bei, seit, von, zu, aus, nach ... always take the DATIVE
@@ -167,10 +191,82 @@ Even so, a dataset this large can still contain occasional mistakes. If you
 find one, please open an issue with the exercise text.
 
 
+GENERATION CODE (generation_code/)
+----------------------------------
+All scripts used to build and check the exercises. They were written for the
+original development machine (Linux) and are included so you can see exactly
+how the data was made. They read and write exercises.jsonl / explanations.jsonl
+(one exercise per line) in the folder they are run from; the app files
+exercises.js / explanations.js were produced from those. Scripts marked [AI]
+need Ollama running with the mistral-small model:  ollama pull mistral-small
+
+Making exercises and explanations
+  generate_explanations.py            [AI] explanation for every exercise
+  generate_dative_possession_exercises.py   template generator: dative of interest
+  generate_prep_idiom_exercises.py    template generator: verbs with fixed prepositions
+  merge_explanations.py               merges explanations with all fix/enrich patches
+                                      and writes explanations.js
+
+Adding grammar details to the explanations
+  enrich_case_gender.py               [AI] states case + gender of noun phrases
+  enrich_definiteness.py              [AI] definite vs. indefinite word-order rule
+  enrich_verb_clusters.py             [AI] verb placement in multi-verb sentences
+  enrich_verb_cluster_order.py        [AI] order inside verb clusters
+  enrich_reflexive_dative.py          [AI] reflexive pronouns in the dative
+  enrich_idiom_phrase.py              [AI] explains fixed phrases
+  enrich_all_idioms.py                [AI] explains every detected idiom
+  find_definiteness_candidates.py     finds exercises needing the definiteness rule
+
+Idiom detection (4 passes, each stricter)
+  detect_all_idioms.py                [AI] pass 1: find candidate idioms
+  verify_idiom_candidates.py          [AI] pass 2: re-check, reject literal phrases
+  verify_idioms_pass3.py              [AI] pass 3: reject idioms English uses too
+  verify_idioms_pass4.py              [AI] pass 4: mechanical dictionary-meaning test
+
+Rule-based checkers (no AI)
+  check_coverage.py                   the explanation must cover every word of the sentence
+  check_case_accuracy.py              preposition case table, two-way prepositions,
+                                      contractions (im, zum, ins ...)
+  check_verb_order.py                 word-order claims vs. real word positions
+  check_verb_order_v2.py              stricter version, also tracks nouns and
+                                      "before/after the subject/verb/object" claims
+
+Fixing errors
+  fix_case_errors.py                  [AI] rewrites explanations with case errors
+  fix_order_errors.py                 [AI] rewrites explanations with order errors
+  fix_coverage.py                     [AI] regenerates explanations that miss words
+  fix_umlaut_coverage.py              restores ä/ö/ü flattened to a/o/u
+  fix_bevor_comma.py                  adds the required comma before "bevor"
+  fix_corpus_case_tags.py             hand-verified case-tag corrections
+  run_check_and_fix_cycle.sh          runs the check -> fix loop in order
+
+Cleaning up chips and nouns
+  classify_bare_nouns.py              [AI] is a capitalised word a noun or a name?
+  classify_noarticle_nouns.py         [AI] same, for nouns without an article
+  convert_bare_nouns.py               turns bare nouns into proper noun-phrase chips
+  backfill_noarticle_gender.py        fills in gender from the rest of the data
+  known_genders.py                    hand-built gender list for rare nouns
+  classify_stranded_words.py          finds words not attached to a chip
+  reattach_stranded_words.py          attaches them to the right chip
+  merge_stranded_adjectives.py        joins adjectives to their noun (with endings)
+  split_bare_noun_phrases.py          splits merged article+noun chips
+  split_bare_noun_adj_phrases.py      same, with adjectives
+  split_bare_noun_zu_infinitive.py    splits "[noun] zu [infinitive]" chips
+  split_bare_prep_phrases.py          splits preposition+article+noun chips
+  split_multiword_bare_noun.py        splits multi-word noun chips
+
+Other
+  no_cache_server.py                  local web server that always serves fresh files
+
+Known issue: about 34 exercises in "Coordinating conjunctions" are missing the
+required comma before "aber" (commas were not covered by the checkers).
+
+
 FILES
 -----
 index.html        the app (layout, logic, speech, statistics)
 exercises.js      all 17,154 exercises with their chips and English translations
 explanations.js   the explanation for every exercise
-screenshot.png    picture of an exercise
+media/           demo.gif, demo.mp4 and screenshot.png
+generation_code/  all scripts used to make and check the exercises (see above)
 README.txt        this file
