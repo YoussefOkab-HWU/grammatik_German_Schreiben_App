@@ -1,0 +1,2629 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Grammatik</title>
+<style>
+  :root {
+    --prep: #66bb6a;
+    --der: #64b5f6;
+    --ein: #ffb74d;
+    --neg: #ce93d8;
+    --noun: #80cbc4;
+    --chip-bg: #37474f;
+    --chip-border: #546e7a;
+    --bg: #121212;
+    --card: #1e1e1e;
+    --text: #e8e8e8;
+    --muted: #9a9a9a;
+    --border: #3a3a3a;
+    --correct: #66bb6a;
+    --wrong: #ef5350;
+    --warn: #d9a441;
+    --start-hint: #ffd54f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    margin: 0;
+    padding: 0;
+    display: flex;
+    justify-content: center;
+  }
+  #app {
+    width: 100%;
+    max-width: 820px;
+    padding: 20px 16px 80px;
+  }
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+  h1 { font-size: 22px; margin: 0; color: var(--text); }
+  #umlaut-bar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .umlaut-btn {
+    background: #2a2a2a;
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 14px;
+    cursor: pointer;
+    font-size: 17px;
+    font-weight: 600;
+    line-height: 1;
+  }
+  .umlaut-btn:hover { background: #333; }
+  .umlaut-btn:active { background: #3d3d3d; }
+  #stats-toggle, #reset-stats {
+    background: #2a2a2a;
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 10px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  #category-label {
+    display: inline-block;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+  #english-hint {
+    color: var(--muted);
+    font-size: 20px;
+    margin-bottom: 14px;
+    font-style: italic;
+  }
+  #card {
+    background: var(--card);
+    border-radius: 12px;
+    padding: 24px;
+    border: 1px solid var(--border);
+  }
+  #sentence {
+    font-size: 19px;
+    line-height: 2.6;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+  }
+  .word { padding: 0 2px; color: var(--text); }
+  .prep-blank {
+    border: none;
+    border-bottom: 2px solid var(--prep);
+    background: transparent;
+    font-size: 18px;
+    font-family: inherit;
+    color: var(--text);
+    text-align: center;
+    padding: 2px 4px;
+    outline: none;
+    min-width: 55px;
+  }
+  /* display:contents so a gap's chips/dots become direct flex children of
+     #sentence -- lets the whole sentence wrap chip-by-chip like normal text
+     instead of gap0 being one rigid unbreakable block that force-wraps
+     trailing punctuation onto its own orphaned line */
+  .gap {
+    display: contents;
+  }
+  .insert-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    min-width: 10px;
+    border-radius: 50%;
+    background: #5a6b7a;
+    margin: 0 5px;
+    cursor: pointer;
+    transition: transform 0.12s ease, background 0.12s ease;
+    vertical-align: middle;
+  }
+  .insert-dot:hover {
+    background: #90b8e8;
+    transform: scale(1.5);
+  }
+  .insert-dot.dot-armed {
+    background: #ffffff;
+    transform: scale(2.2);
+    box-shadow: 0 0 6px rgba(255,255,255,0.6);
+  }
+  /* build-forward mode: this isn't the current position -- dropping a
+     regular chip here is rejected (position only, not a right/wrong signal) */
+  .insert-dot.dot-blocked {
+    background: #d9534f;
+    transform: scale(1.8);
+    box-shadow: 0 0 6px rgba(217,83,79,0.6);
+    cursor: not-allowed;
+  }
+  /* draggable chip blocks placed inline in the sentence */
+  .placed-block {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: var(--chip-bg);
+    border: 1px solid var(--chip-border);
+    border-radius: 7px;
+    padding: 4px 8px;
+    cursor: grab;
+  }
+  .placed-block.wrong-position {
+    background: #4a1f1f;
+    border: 2px solid var(--wrong);
+  }
+  .placed-block.wrong-position.content-ok {
+    background: #443a1a;
+    border: 2px solid var(--warn);
+  }
+  .placed-block.dragging { opacity: 0.4; }
+  .placed-block .field-input {
+    background: #1a1a1a;
+    border: none;
+    border-bottom: 2px solid #777;
+    color: var(--text);
+    font-size: 16px;
+    font-family: inherit;
+    text-align: center;
+    outline: none;
+    padding: 1px 2px;
+    border-radius: 3px;
+  }
+  .field-der { border-bottom-color: var(--der) !important; width: 55px; }
+  .field-ein { border-bottom-color: var(--ein) !important; width: 60px; }
+  /* deliberately matches field-ein, not var(--neg) -- a purple-tinted field
+     would give away "this noun needs kein" before the learner even reads the
+     sentence. Blending in with ein-word styling means the article FAMILY
+     (der/ein/kein) has to be worked out from the English, not the color. */
+  .field-neg { border-bottom-color: var(--ein) !important; width: 55px; }
+  .field-adj-stem { color: #bbb; }
+  .field-adj-ending { width: 32px; border-bottom-style: dashed; }
+  .field-verb { width: 110px; font-weight: 600; }
+  .field-pronoun { width: 90px; font-weight: 600; font-style: italic; }
+  .field-prefix { width: 70px; font-weight: 600; }
+  /* unlike field-neg, this box only exists because the learner clicked the
+     "+ negation box" button -- they already know it's testing "nicht" before
+     it even appears, so there's no answer to leak by giving it its own color */
+  .field-negation-guess { width: 70px; font-weight: 600; border-bottom-color: var(--neg) !important; }
+  /* same reasoning as field-negation-guess -- only exists because the learner
+     clicked "+ preposition box" themselves */
+  .field-preposition-guess { width: 70px; font-weight: 600; border-bottom-color: var(--prep) !important; }
+  .noun-fixed { color: var(--text); font-weight: 500; }
+  .nicht-chip { background: var(--neg); color: #1a0d1f; font-weight: 600; }
+  .noun-chip { background: var(--noun); color: #0a2320; font-weight: 600; }
+
+  /* tray */
+  #tray {
+    margin-top: 22px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    min-height: 46px;
+  }
+  #tray.drag-over { background: #1a2a1a; border-radius: 8px; }
+  #tray-label { font-size: 12px; color: var(--muted); width: 100%; margin-bottom: 4px; }
+  #add-prefix-btn, #add-negation-btn, #add-prep-btn {
+    background: #2a2a2a;
+    color: var(--text);
+    border: 1px dashed var(--border);
+    border-radius: 7px;
+    padding: 4px 10px;
+    cursor: pointer;
+    font-size: 13px;
+    margin-left: 6px;
+  }
+  #add-prefix-btn:hover, #add-negation-btn:hover, #add-prep-btn:hover { background: #333; }
+  #reset-board-btn {
+    background: #2a2a2a;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 16px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  #reset-board-btn:hover { background: #3a2323; color: #e8b4b0; border-color: #6b3a37; }
+  .placed-block.has-remove { position: relative; padding-right: 16px; }
+  .remove-extra {
+    position: absolute;
+    top: -7px;
+    right: -7px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--wrong);
+    color: #2a0a0a;
+    border: none;
+    font-size: 11px;
+    line-height: 16px;
+    text-align: center;
+    padding: 0;
+    cursor: pointer;
+    font-weight: 700;
+  }
+  .tray-block { cursor: grab; }
+  .tray-block.dragging { opacity: 0.4; }
+  .tray-block.selected {
+    outline: 2px solid #6cf;
+    outline-offset: 2px;
+    box-shadow: 0 0 8px rgba(102, 204, 255, 0.6);
+  }
+  .insert-dot.click-armed {
+    background: #6cf;
+    transform: scale(1.6);
+    cursor: pointer;
+  }
+  /* marks whichever tray chip belongs at gap 0 (the actual start of the
+     German answer, not wherever English happens to start) -- see
+     renderEnglishHint()'s comment for why this replaced the underline */
+  .tray-block.start-hint {
+    border: 2px solid var(--start-hint);
+    box-shadow: 0 0 6px rgba(255, 213, 79, 0.5);
+  }
+  .ft-hint-word.start-hint {
+    border: 2px solid var(--start-hint);
+    box-shadow: 0 0 6px rgba(255, 213, 79, 0.5);
+  }
+  #freetype-start-note { font-size: 12px; color: var(--muted); margin: -4px 0 10px; }
+
+  #controls { margin-top: 20px; display: flex; gap: 10px; }
+  button.primary {
+    background: #4a4a4a;
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 22px;
+    font-size: 15px;
+    cursor: pointer;
+  }
+  button.primary:hover { background: #565656; }
+  button.primary:disabled { opacity: .4; cursor: default; }
+  #feedback { margin-top: 16px; font-size: 15px; line-height: 1.8; }
+  .fb-line { margin-bottom: 4px; }
+  .fb-case { color: var(--muted); font-style: italic; font-size: 13px; }
+  .fb-note { color: var(--prep); font-size: 13px; padding-left: 14px; margin-top: -2px; }
+  span.fb-note { color: var(--muted); font-size: 13px; padding-left: 0; margin-top: 0; font-style: italic; }
+  .fb-ok { color: var(--correct); }
+  .fb-bad { color: var(--wrong); }
+  .fb-warn { color: var(--warn); }
+  #answer-reveal {
+    margin-top: 10px;
+    padding: 12px;
+    background: #262626;
+    border-radius: 8px;
+    font-size: 15px;
+    border: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .answer-row { display: flex; align-items: center; gap: 10px; }
+  #answer-reveal .answer-text { flex: 1; }
+  .mic-btn {
+    flex-shrink: 0;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: #333;
+    color: var(--text);
+    cursor: pointer;
+    font-size: 15px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+  }
+  .mic-btn:hover { background: #3d3d3d; }
+  .mic-btn:disabled { opacity: .4; cursor: default; }
+  .mic-btn.listening { background: var(--wrong); animation: mic-pulse 1s infinite; }
+  @keyframes mic-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(239,83,80,0.5); }
+    50% { box-shadow: 0 0 0 6px rgba(239,83,80,0); }
+  }
+  #pron-status { font-size: 13px; color: var(--muted); }
+  #pron-score { font-size: 15px; font-weight: 700; }
+  #pron-words { font-size: 16px; line-height: 1.9; }
+  .pron-word { padding: 1px 3px; border-radius: 4px; font-weight: 600; cursor: pointer; }
+  .pron-word:hover { filter: brightness(1.3); }
+  .pron-heard { font-size: 12px; color: var(--muted); font-style: italic; margin-top: -4px; }
+  #tekamolo-panel { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+  #tekamolo-title { font-size: 12px; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.03em; }
+  .tek-row { display: flex; align-items: center; gap: 10px; padding: 3px 8px; border-radius: 5px; margin-bottom: 3px; border-left: 3px solid transparent; }
+  .tek-chunk { font-weight: 600; min-width: 180px; }
+  .tek-role { color: var(--muted); font-size: 13px; }
+  .tek-row.tek-t { border-left-color: #64b5f6; background: rgba(100,181,246,0.08); }
+  .tek-row.tek-k { border-left-color: #ef9a9a; background: rgba(239,154,154,0.08); }
+  .tek-row.tek-m { border-left-color: #ffb74d; background: rgba(255,183,77,0.08); }
+  .tek-row.tek-l { border-left-color: #80cbc4; background: rgba(128,203,196,0.08); }
+  .tek-row.tek-neg { border-left-color: #e57373; background: rgba(229,115,115,0.08); }
+  .tek-row.tek-other { border-left-color: #777; }
+  .tek-row.tek-real { align-items: flex-start; border-left-color: #9575cd; background: rgba(149,117,205,0.08); }
+  .tek-row.tek-real .tek-role { line-height: 1.5; }
+  .tek-badges { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+  .tek-badge { font-size: 10px; font-weight: 600; color: #ce93d8; background: rgba(206,147,216,0.12); border: 1px solid rgba(206,147,216,0.4); border-radius: 4px; padding: 1px 6px; white-space: nowrap; }
+  .speak-btn {
+    flex-shrink: 0;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: #333;
+    color: var(--text);
+    cursor: pointer;
+    font-size: 15px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+  }
+  .speak-btn:hover { background: #3d3d3d; }
+  .speak-btn:disabled { opacity: .4; cursor: default; }
+  #legend {
+    margin-top: 18px;
+    font-size: 12px;
+    color: var(--muted);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+  }
+  #legend span { display: inline-flex; align-items: center; gap: 4px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+
+  #mode-bar { margin-bottom: 14px; font-size: 13px; color: var(--muted); }
+  #mode-bar label { cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+
+  #freetype-bank-label { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+  #freetype-bank { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+  .ft-hint-word {
+    display: inline-block;
+    background: var(--chip-bg);
+    border: 1px solid var(--chip-border);
+    border-radius: 7px;
+    padding: 4px 10px;
+    font-size: 14px;
+    color: var(--text);
+  }
+  #freetype-input {
+    width: 100%;
+    box-sizing: border-box;
+    background: #1a1a1a;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 16px;
+    padding: 10px 12px;
+    font-family: inherit;
+    resize: vertical;
+  }
+  #freetype-feedback { margin-top: 16px; font-size: 17px; line-height: 2.2; }
+  .ft-word { padding: 1px 3px; border-radius: 3px; }
+  .ft-word.ft-red { background: #4a1f1f; color: #ff8a80; }
+  .ft-word.ft-yellow { background: #443a1a; color: #ffd54f; }
+  .ft-word.ft-underline { text-decoration: underline; text-decoration-color: #6cf; text-decoration-thickness: 2px; }
+  .ft-word.ft-missing { color: var(--muted); font-style: italic; border: 1px dashed var(--border); }
+  #freetype-legend { margin-top: 10px; font-size: 12px; color: var(--muted); }
+  #stats-panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 16px;
+    display: none;
+  }
+  #stats-panel table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  #stats-panel th, #stats-panel td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--border); color: var(--text); }
+  input.wrong { color: var(--wrong) !important; font-weight: 700; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>Grammatik</h1>
+    <div>
+      <button id="stats-toggle">Stats</button>
+      <button id="reset-stats">Reset</button>
+    </div>
+  </header>
+
+  <div id="stats-panel"></div>
+
+  <div id="umlaut-bar">
+    <button type="button" class="umlaut-btn" data-lower="ä" data-upper="Ä" title="Click: ä, Shift-click: Ä">ä</button>
+    <button type="button" class="umlaut-btn" data-lower="ö" data-upper="Ö" title="Click: ö, Shift-click: Ö">ö</button>
+    <button type="button" class="umlaut-btn" data-lower="ü" data-upper="Ü" title="Click: ü, Shift-click: Ü">ü</button>
+    <button type="button" class="umlaut-btn" data-lower="ß" data-upper="SS" title="Click: ß, Shift-click: SS">ß</button>
+  </div>
+
+  <div id="mode-bar">
+    <label><input type="checkbox" id="freetype-toggle" checked> Free-type mode (type the whole sentence instead of dragging)</label>
+  </div>
+
+  <div id="category-label"></div>
+  <div id="english-hint"></div>
+  <div id="card">
+    <div id="sentence"></div>
+    <div id="tray">
+      <div id="tray-label">Drag (or click, then click a dot) verbs / separable prefixes / negation / pronouns / noun-phrase blocks onto a dot</div>
+      <button type="button" id="add-prefix-btn" title="Add a blank box if you think a separable prefix is missing">+ prefix box</button>
+      <button type="button" id="add-negation-btn" title="Add a blank box if you think this sentence needs nicht">+ negation box</button>
+      <button type="button" id="add-prep-btn" title="Add a blank box if you think a preposition is missing">+ preposition box</button>
+    </div>
+
+    <div id="freetype-panel" style="display:none;">
+      <div id="freetype-bank-label">Word bank (shuffled -- order isn't a hint). Articles, "nicht", and prepositions are never shown here -- figure those out yourself.</div>
+      <div id="freetype-bank"></div>
+      <div id="freetype-start-note"></div>
+      <textarea id="freetype-input" rows="3" placeholder="Type the full German sentence here, with your own commas and punctuation..." autocomplete="off" spellcheck="false"></textarea>
+    </div>
+
+    <div id="controls">
+      <button class="primary" id="check-btn">Check</button>
+      <button class="primary" id="next-btn" style="display:none;">Next</button>
+      <button id="reset-board-btn" title="Clear every placement on this sentence and start over from the beginning">Reset board</button>
+    </div>
+    <div id="feedback"></div>
+    <div id="freetype-feedback" style="display:none;"></div>
+    <div id="answer-reveal" style="display:none;"></div>
+  </div>
+
+  <div id="legend">
+    <span><span class="dot" style="background:var(--prep)"></span> preposition</span>
+    <span><span class="dot" style="background:var(--der)"></span> der-word</span>
+    <span><span class="dot" style="background:var(--ein)"></span> ein-word / possessive</span>
+    <span><span class="dot" style="background:var(--neg)"></span> negation</span>
+    <span><span class="dot" style="background:var(--chip-border)"></span> verb (floating)</span>
+    <span><span class="dot" style="background:var(--noun)"></span> bare noun (position only)</span>
+  </div>
+  <div id="freetype-legend" style="display:none;">
+    <span class="ft-word ft-red">red</span> word shouldn't be there &nbsp;
+    <span class="ft-word ft-yellow">yellow</span> right idea, wrong spelling/ending &nbsp;
+    <span class="ft-word ft-underline">underlined</span> correct word, wrong position &nbsp;
+    <span class="ft-word ft-missing">missing</span> word never typed
+  </div>
+</div>
+
+<script src="exercises.js"></script>
+<script src="explanations.js"></script>
+<script>
+const STATS_KEY = "grammatik_stats_v2";
+const HISTORY_LIMIT = 30;
+
+function loadStats() {
+  try { return JSON.parse(localStorage.getItem(STATS_KEY)) || {}; }
+  catch (e) { return {}; }
+}
+function saveStats(stats) { localStorage.setItem(STATS_KEY, JSON.stringify(stats)); }
+let stats = loadStats();
+let recentIds = [];
+
+const byCategory = {};
+for (const ex of EXERCISES) (byCategory[ex.category] = byCategory[ex.category] || []).push(ex);
+const categories = Object.keys(byCategory);
+
+function categoryWeight(cat) {
+  const s = stats[cat];
+  if (!s || s.attempts < 3) return 3;
+  const accuracy = s.correct / s.attempts;
+  return Math.max(0.15, 1.4 - accuracy);
+}
+
+function pickExercise() {
+  const weights = categories.map(categoryWeight);
+  const total = weights.reduce((a, b) => a + b, 0);
+  let r = Math.random() * total;
+  let chosenCat = categories[0];
+  for (let i = 0; i < categories.length; i++) {
+    r -= weights[i];
+    if (r <= 0) { chosenCat = categories[i]; break; }
+  }
+  const pool = byCategory[chosenCat];
+  let candidate, tries = 0;
+  do {
+    candidate = pool[Math.floor(Math.random() * pool.length)];
+    tries++;
+  } while (recentIds.includes(candidate.id) && tries < 20);
+  recentIds.push(candidate.id);
+  if (recentIds.length > HISTORY_LIMIT) recentIds.shift();
+  return candidate;
+}
+
+let current = null;
+let placements = []; // { gap, chipIndex } -- chipIndex is a number (real chip) or string id (extra box)
+let checked = false;
+let dragChipIndex = null; // chip currently being dragged (from tray or from a gap) -- number or string id
+let selectedChipIndex = null; // tray chip picked via click-to-place (tap-tap alternative to
+                               // drag-and-drop, for anyone who finds repeated dragging tiring) --
+                               // number or string id, same identity space as dragChipIndex
+
+// User-created blank guess boxes ("separable prefix?" and "negation (nicht)?").
+// Real verb_prefix and negation_nicht chips (from current.chips) are NEVER
+// auto-shown in the tray anymore -- their mere presence would already give
+// away that the sentence needs one at all. Instead the learner decides for
+// themselves whether to add a guess box via the relevant "+" button, and can
+// remove it again if they change their mind. (kein-negation isn't part of
+// this -- it's embedded directly in a noun_phrase chip's own article field,
+// which is always shown like any other noun; its color was the giveaway
+// there, not its presence, so that's fixed separately via field-neg's CSS.)
+let extraChips = []; // { id: "x1", type: "verb_prefix" | "negation_guess", _typed: {} }
+let nextExtraNum = 1;
+
+function chipAt(idx) {
+  return typeof idx === "string" ? extraChips.find(e => e.id === idx) : current.chips[idx];
+}
+
+// Fixed "preposition + bare noun" idioms where the preposition's meaning
+// isn't literal/compositional -- checked before anything else, since case
+// or verb-type reasoning wouldn't explain these correctly anyway.
+const PREP_IDIOMS = {
+  "zu|ende": "fixed idiom “zu Ende” = “over / finished” — not a literal “to”",
+  "zu|hause": "fixed idiom “zu Hause” = “at home”",
+  "zu|fuße": "fixed idiom “zu Fuß” = “on foot”",
+  "zu|fuß": "fixed idiom “zu Fuß” = “on foot”",
+  "zu|bett": "fixed idiom “zu Bett” = “to bed”",
+  "nach|hause": "fixed idiom “nach Hause” = “(toward) home” — no article, unlike a normal “nach + dative” phrase",
+};
+
+// two-way prepositions: the SAME word means something different depending on
+// whether the noun after it is dative (location) or accusative (direction) --
+// this is exactly the dative/accusative choice the app already grades, so the
+// case is a reliable signal for which sense is meant here.
+const TWO_WAY_PREP_SENSE = {
+  an: { Dat: "static location — right next to / touching a (mostly vertical) surface", Acc: "movement onto / toward that surface — OR, with verbs like “denken an” / “sich erinnern an”, marks the thing being thought of/remembered (accusative regardless of physical direction)" },
+  auf: { Dat: "static location — on top of something", Acc: "movement onto a (mostly horizontal) surface" },
+  in: { Dat: "static location — inside something", Acc: "movement into something" },
+  "über": { Dat: "static location — above something", Acc: "movement over / across something — OR, very commonly, “about / concerning” a topic (e.g. “Informationen über X” = information about X)" },
+  unter: { Dat: "static location — underneath something", Acc: "movement to underneath something" },
+  vor: { Dat: "static location — in front of something (or time: “ago”)", Acc: "movement to in front of something" },
+  hinter: { Dat: "static location — behind something", Acc: "movement to behind something" },
+  neben: { Dat: "static location — next to something", Acc: "movement to next to something" },
+  zwischen: { Dat: "static location — between things", Acc: "movement to between things" },
+};
+
+// prepositions that always take the same case -- their "sense" is just a
+// short reminder of what that preposition typically does, not a case choice
+const STATIC_PREP_SENSE = {
+  aus: "origin — coming out of / made of something",
+  bei: "at someone's place, or during an activity/company",
+  mit: "accompaniment or means — together with / by using",
+  nach: "direction toward a place, or “after” in time",
+  seit: "a point in time something has been going on since",
+  von: "origin/source (“from”), or standing in for a genitive (“of”)",
+  zu: "direction toward a goal or purpose",
+  durch: "movement through something, or cause/means (“by means of”)",
+  "für": "purpose or beneficiary — intended for",
+  gegen: "opposition (“against”), or an approximate time",
+  ohne: "absence — without",
+  um: "clock time, or movement around something",
+  wegen: "cause/reason — because of",
+  "während": "simultaneity — during a time period",
+  trotz: "concession — despite / in spite of",
+  bis: "an endpoint in time or space — until / as far as",
+};
+
+// da-compound verbs: which preposition each one always pairs with, and why --
+// this is fixed government (Rektion), not derivable from case/direction logic
+// the way a normal two-way preposition is, so it has to be a lookup. Keyed by
+// the bare infinitive (chip.display with a leading "sich " already stripped).
+const DA_COMPOUND_VERB_PREP = {
+  achten: { prep: "auf", note: "“achten auf” (to pay attention to) always takes “auf”" },
+  bestehen: { prep: "auf", note: "“bestehen auf” (to insist on) always takes “auf”" },
+  beschweren: { prep: "über", note: "“sich beschweren über” (to complain about) always takes “über”" },
+  denken: { prep: "an", note: "“denken an” (to think of/about) always takes “an”" },
+  erinnern: { prep: "an", note: "“sich erinnern an” (to remember) always takes “an”" },
+  freuen: { prep: "auf", note: "“sich freuen auf” (to look forward to) always takes “auf”" },
+  gewöhnen: { prep: "an", note: "“sich gewöhnen an” (to get used to) always takes “an”" },
+  hoffen: { prep: "auf", note: "“hoffen auf” (to hope for) always takes “auf”" },
+  interessieren: { prep: "für", note: "“sich interessieren für” (to be interested in) always takes “für”" },
+  kümmern: { prep: "um", note: "“sich kümmern um” (to take care of) always takes “um”" },
+  verlassen: { prep: "auf", note: "“sich verlassen auf” (to rely on) always takes “auf”" },
+  wundern: { prep: "über", note: "“sich wundern über” (to be surprised about) always takes “über”" },
+  zweifeln: { prep: "an", note: "“zweifeln an” (to doubt) always takes “an”" },
+  ärgern: { prep: "über", note: "“sich ärgern über” (to be annoyed about) always takes “über”" },
+};
+
+// a handful of da-compound idioms use "haben"/"sein" as the verb, but the
+// preposition actually depends on the fixed adjective/noun they're paired
+// with ("Angst haben VOR", "stolz sein AUF", "überzeugt sein VON") -- keyed
+// by that fixed word since the bare verb alone is ambiguous
+const DA_COMPOUND_IDIOM_PREP = {
+  Angst: { prep: "vor", note: "“Angst haben vor” (to be afraid of) always takes “vor”" },
+  stolz: { prep: "auf", note: "“stolz sein auf” (to be proud of) always takes “auf”" },
+  "überzeugt": { prep: "von", note: "“überzeugt sein von” (to be convinced of) always takes “von”" },
+};
+
+// prepositions that trigger an inserted "r" in the da-compound (vowel-initial)
+const DA_R_PREPS = new Set(["an", "auf", "über", "in", "unter", "um"]);
+function daCompoundForm(prep) {
+  return "da" + (DA_R_PREPS.has(prep) ? "r" : "") + prep;
+}
+
+// explain WHY this specific "da..." form is correct for the current exercise
+// -- looks at the fixed skeleton text and chips before the first comma to
+// find the governing verb/idiom, then confirms the looked-up preposition
+// actually produces the chip's own answer before saying anything (so a gap in
+// the lookup table shows nothing, rather than a wrong or mismatched reason)
+function explainDaCompound(chip) {
+  if (chip.type !== "adverb") return null;
+  const skel = current.skeleton;
+  let commaIdx = skel.findIndex(t => t.type === "text" && t.answer === ",");
+  if (commaIdx === -1) commaIdx = skel.length;
+  const mainVerbs = current.chips.filter(c => c.type === "verb" && c.correct_gap <= commaIdx);
+  const fixedLeadWords = skel.slice(0, commaIdx).filter(t => t.type === "text").map(t => t.answer);
+
+  // "Es geht darum, dass..." -- fixed idiom, "geht" is skeleton text, not a chip
+  if (mainVerbs.length === 0) {
+    if (fixedLeadWords.includes("geht")) {
+      const entry = { prep: "um", note: "“es geht um” (it's about) always takes “um”" };
+      return daCompoundForm(entry.prep) === chip.answer ? entry.note : null;
+    }
+    return null;
+  }
+
+  const mainVerb = mainVerbs.reduce((a, b) => (b.correct_gap > a.correct_gap ? b : a));
+  const bareInfinitive = mainVerb.display.replace(/^sich /, "");
+
+  for (const word of fixedLeadWords) {
+    if (DA_COMPOUND_IDIOM_PREP[word]) {
+      const entry = DA_COMPOUND_IDIOM_PREP[word];
+      return daCompoundForm(entry.prep) === chip.answer ? entry.note : null;
+    }
+  }
+  const entry = DA_COMPOUND_VERB_PREP[bareInfinitive];
+  if (entry) return daCompoundForm(entry.prep) === chip.answer ? entry.note : null;
+  return null;
+}
+
+// what sits right after a given skeleton position, per the ANSWER KEY (not
+// the learner's current placement) -- used to spot idioms and to read off
+// the case a two-way preposition governs here
+function getFollowingWordInfo(skelIndex) {
+  // a chip placed in the gap right after this preposition renders BEFORE the
+  // next fixed skeleton token, so it must be checked first -- e.g. "neben"
+  // then gap-1 holds a noun_phrase chip, with skeleton[1] just being the
+  // sentence-final "." further along, not the word right after "neben"
+  const gap = skelIndex + 1;
+  const candidates = current.chips.filter(c => c.correct_gap === gap).sort((a, b) => a.order - b.order);
+  if (candidates.length > 0) {
+    const first = candidates[0];
+    if (first.type === "noun_phrase") {
+      return { text: first.noun, case: first.article ? first.article.case : null };
+    }
+    return { text: first.display || first.answer || null, case: null };
+  }
+  const nextSkel = current.skeleton[skelIndex + 1];
+  if (nextSkel && nextSkel.type === "text") {
+    return { text: nextSkel.display, case: null };
+  }
+  return { text: null, case: null };
+}
+
+function explainPreposition(prepLemma, skelIndex) {
+  const lemma = (prepLemma || "").toLowerCase();
+  const info = getFollowingWordInfo(skelIndex);
+  if (info.text) {
+    const idiom = PREP_IDIOMS[lemma + "|" + info.text.toLowerCase()];
+    if (idiom) return idiom;
+  }
+  if (TWO_WAY_PREP_SENSE[lemma]) {
+    if (info.case && TWO_WAY_PREP_SENSE[lemma][info.case]) {
+      return TWO_WAY_PREP_SENSE[lemma][info.case] + ` (${(CASE_LABELS[info.case] || info.case).toLowerCase()} here)`;
+    }
+    return `location if dative (${TWO_WAY_PREP_SENSE[lemma].Dat}), direction if accusative (${TWO_WAY_PREP_SENSE[lemma].Acc})`;
+  }
+  return STATIC_PREP_SENSE[lemma] || null;
+}
+
+const sentenceEl = document.getElementById("sentence");
+const trayEl = document.getElementById("tray");
+const categoryLabelEl = document.getElementById("category-label");
+const englishHintEl = document.getElementById("english-hint");
+const feedbackEl = document.getElementById("feedback");
+const answerRevealEl = document.getElementById("answer-reveal");
+const checkBtn = document.getElementById("check-btn");
+const nextBtn = document.getElementById("next-btn");
+
+const freetypeToggleEl = document.getElementById("freetype-toggle");
+const freetypePanelEl = document.getElementById("freetype-panel");
+const freetypeBankEl = document.getElementById("freetype-bank");
+const freetypeInputEl = document.getElementById("freetype-input");
+const freetypeFeedbackEl = document.getElementById("freetype-feedback");
+const freetypeLegendEl = document.getElementById("freetype-legend");
+const resetBoardBtnEl = document.getElementById("reset-board-btn");
+let freeTypeMode = true;
+
+function speakGerman(text) {
+  if (!("speechSynthesis" in window)) return;
+  speechSynthesis.cancel(); // stop anything already queued/playing
+  // Chrome has a long-standing bug where the speech engine silently "pauses"
+  // itself after the tab has been idle for a while, after which .speak()
+  // calls are queued but never actually spoken until .resume() unsticks it
+  speechSynthesis.resume();
+
+  const germanVoice = speechSynthesis.getVoices().find(v => v.lang && v.lang.startsWith("de"));
+
+  // A plain delay before .speak() wasn't enough -- Chrome still clips the
+  // first ~100-200ms of actual AUDIO OUTPUT on the first utterance after the
+  // engine has been idle, no matter how long we wait beforehand. The fix
+  // that actually works: queue a throwaway near-silent utterance first, so
+  // the engine's warm-up glitch eats that instead of the real sentence --
+  // by the time the real utterance starts, playback is already flowing.
+  const warmup = new SpeechSynthesisUtterance(".");
+  warmup.lang = "de-DE";
+  warmup.volume = 0;
+  if (germanVoice) warmup.voice = germanVoice;
+
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.lang = "de-DE";
+  if (germanVoice) utter.voice = germanVoice;
+  utter.onerror = (e) => console.error("speech synthesis error:", e.error);
+
+  speechSynthesis.speak(warmup);
+  speechSynthesis.speak(utter);
+}
+
+// --- Pronunciation testing -------------------------------------------------
+// Uses the browser's built-in SpeechRecognition (mic -> transcript). This is
+// NOT true phoneme-level pronunciation scoring -- it's a proxy: we align the
+// recognized words against the target sentence word-by-word and score each
+// pair by string similarity. Mispronounce a word badly enough and the
+// recognizer won't transcribe it as that word at all, which is what drives
+// the score down; it can't judge accent/intonation quality directly.
+
+// Chrome's speech recognizer auto-formats spoken numbers+currency into
+// symbols (e.g. "fünfzig Euro" -> "50 €"), which would otherwise never match
+// the target word "Euro" during scoring even though it was said correctly.
+const SYMBOL_WORDS = { "€": "euro", "$": "dollar", "£": "pfund", "%": "prozent" };
+
+// Chrome's recognizer frequently transcribes spoken numbers as digits
+// ("acht" -> "8") even when the target sentence spells them out as words --
+// same failure mode as the €/Euro mismatch. Parses German number words
+// (0-999, including compounds like "einundzwanzig") into their digit string
+// so "acht" and "8" normalize to the same canonical form and score as a match.
+const GERMAN_ONES = { "null":0, "eins":1, "ein":1, "eine":1, "zwei":2, "drei":3, "vier":4,
+  "fünf":5, "sechs":6, "sieben":7, "acht":8, "neun":9, "zehn":10, "elf":11, "zwölf":12,
+  "dreizehn":13, "vierzehn":14, "fünfzehn":15, "sechzehn":16, "siebzehn":17,
+  "achtzehn":18, "neunzehn":19 };
+const GERMAN_TENS = { "zwanzig":20, "dreißig":30, "vierzig":40, "fünfzig":50,
+  "sechzig":60, "siebzig":70, "achtzig":80, "neunzig":90 };
+
+function germanNumberWordToDigit(w) {
+  if (w in GERMAN_ONES) return String(GERMAN_ONES[w]);
+  if (w in GERMAN_TENS) return String(GERMAN_TENS[w]);
+  if (w === "hundert") return "100";
+  const hundertMatch = w.match(/^(.+)hundert(.*)$/);
+  if (hundertMatch) {
+    const [, prefix, rest] = hundertMatch;
+    const hundreds = prefix === "" ? 1 : GERMAN_ONES[prefix];
+    if (hundreds === undefined) return null;
+    if (rest === "") return String(hundreds * 100);
+    const restVal = germanNumberWordToDigit(rest);
+    if (restVal === null) return null;
+    return String(hundreds * 100 + parseInt(restVal, 10));
+  }
+  const undMatch = w.match(/^(.+)und(.+)$/);
+  if (undMatch) {
+    const [, onesPart, tensPart] = undMatch;
+    if (onesPart in GERMAN_ONES && tensPart in GERMAN_TENS) {
+      return String(GERMAN_ONES[onesPart] + GERMAN_TENS[tensPart]);
+    }
+  }
+  return null;
+}
+
+function normalizeWord(w) {
+  const cleaned = w.toLowerCase().replace(/[.,!?;:„“"']/g, "").trim();
+  if (SYMBOL_WORDS[cleaned]) return SYMBOL_WORDS[cleaned];
+  if (/^\d+$/.test(cleaned)) return cleaned; // already a digit string
+  const asNumber = germanNumberWordToDigit(cleaned);
+  return asNumber !== null ? asNumber : cleaned;
+}
+
+function levenshtein(a, b) {
+  const m = a.length, n = b.length;
+  const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      dp[i][j] = Math.min(
+        dp[i - 1][j] + 1,
+        dp[i][j - 1] + 1,
+        dp[i - 1][j - 1] + cost
+      );
+    }
+  }
+  return dp[m][n];
+}
+
+function wordSimilarity(a, b) {
+  if (a.length === 0 && b.length === 0) return 1;
+  if (a.length === 0 || b.length === 0) return 0;
+  const dist = levenshtein(a, b);
+  return 1 - dist / Math.max(a.length, b.length);
+}
+
+// Aligns target words against recognized words (Needleman-Wunsch style,
+// maximizing total similarity) so extra/missing/reordered recognized words
+// don't throw off which target word each score belongs to.
+function alignWords(targetWords, recognizedWords) {
+  const n = targetWords.length, m = recognizedWords.length;
+  const norm = (arr) => arr.map(normalizeWord);
+  const t = norm(targetWords), r = norm(recognizedWords);
+  const dp = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+  const back = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(null));
+  for (let i = 1; i <= n; i++) { dp[i][0] = 0; back[i][0] = "up"; }
+  for (let j = 1; j <= m; j++) { dp[0][j] = 0; back[0][j] = "left"; }
+  for (let i = 1; i <= n; i++) {
+    for (let j = 1; j <= m; j++) {
+      const diagScore = dp[i - 1][j - 1] + wordSimilarity(t[i - 1], r[j - 1]);
+      const upScore = dp[i - 1][j];
+      const leftScore = dp[i][j - 1];
+      if (diagScore >= upScore && diagScore >= leftScore) {
+        dp[i][j] = diagScore; back[i][j] = "diag";
+      } else if (upScore >= leftScore) {
+        dp[i][j] = upScore; back[i][j] = "up";
+      } else {
+        dp[i][j] = leftScore; back[i][j] = "left";
+      }
+    }
+  }
+  const results = new Array(n);
+  let i = n, j = m;
+  while (i > 0 || j > 0) {
+    const dir = i > 0 && j > 0 ? back[i][j] : (i > 0 ? "up" : "left");
+    if (dir === "diag") {
+      results[i - 1] = { word: targetWords[i - 1], heard: recognizedWords[j - 1], score: wordSimilarity(t[i - 1], r[j - 1]) };
+      i--; j--;
+    } else if (dir === "up") {
+      results[i - 1] = { word: targetWords[i - 1], heard: null, score: 0 };
+      i--;
+    } else {
+      j--;
+    }
+  }
+  return results;
+}
+
+// red -> yellow -> dark green, continuous over score 0..1
+function scoreColor(score) {
+  const stops = [
+    [0.0, [239, 83, 80]],   // red
+    [0.5, [217, 164, 65]],  // yellow
+    [1.0, [46, 125, 50]],   // dark green
+  ];
+  let lo = stops[0], hi = stops[stops.length - 1];
+  for (let k = 0; k < stops.length - 1; k++) {
+    if (score >= stops[k][0] && score <= stops[k + 1][0]) { lo = stops[k]; hi = stops[k + 1]; break; }
+  }
+  const span = hi[0] - lo[0] || 1;
+  const t = (score - lo[0]) / span;
+  const rgb = lo[1].map((c, idx) => Math.round(c + (hi[1][idx] - c) * t));
+  return `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
+}
+
+// Recognizes exactly one word in isolation (continuous=false, single
+// utterance). Doing this per-word instead of feeding the recognizer the
+// whole sentence matters for pronunciation testing specifically: a
+// full-sentence recognizer leans on its language model to predict the most
+// grammatically-likely word from context, which can silently "correct" a
+// mispronounced word into the right one -- masking exactly the error we're
+// trying to catch. With no sentence context around a lone word, there's much
+// less for the model to guess from, so the result tracks the actual acoustics
+// more closely.
+function testPronunciation() {
+  const micBtn = document.getElementById("mic-btn");
+  const statusEl = document.getElementById("pron-status");
+  const wordsEl = document.getElementById("pron-words");
+  const heardEl = document.getElementById("pron-heard-line");
+  const RecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!RecognitionCtor) {
+    statusEl.textContent = "Speech recognition isn't supported in this browser (try Chrome).";
+    return;
+  }
+  if (micBtn.classList.contains("listening")) return;
+
+  wordsEl.innerHTML = "";
+  heardEl.textContent = "";
+  statusEl.textContent = "Listening… speak the answer now.";
+  micBtn.classList.add("listening");
+  micBtn.disabled = true;
+
+  const recognition = new RecognitionCtor();
+  recognition.lang = "de-DE";
+  // continuous + interimResults so WE control when to stop (a fixed silence
+  // timer below) instead of relying on Chrome's own undocumented pause
+  // detection, which was cutting people off mid-sentence during a thinking-pause
+  recognition.continuous = true;
+  recognition.interimResults = true;
+  recognition.maxAlternatives = 1;
+
+  const SILENCE_TIMEOUT_MS = 1000;
+  // before any speech is detected, allow a much longer grace period -- this
+  // covers responding to the mic permission prompt and reading the sentence
+  // before speaking, neither of which should count as "the silence that
+  // means you're done talking"
+  const INITIAL_GRACE_MS = 10000;
+  let finalTranscript = "";
+  let lastSpeechTime = Date.now();
+  let hasHeardSpeech = false;
+
+  const silenceTimer = setInterval(() => {
+    const limit = hasHeardSpeech ? SILENCE_TIMEOUT_MS : INITIAL_GRACE_MS;
+    if (Date.now() - lastSpeechTime > limit) {
+      clearInterval(silenceTimer);
+      recognition.stop();
+    }
+  }, 150);
+
+  recognition.onstart = () => {
+    lastSpeechTime = Date.now(); // audio capture actually began (permission granted)
+    statusEl.textContent = "Listening…";
+  };
+
+  // Chrome's top transcript guess is a poor proxy for pronunciation quality on
+  // its own -- its language model will happily "auto-correct" a mumbled or
+  // accented word into the grammatically-likely correct one, which then
+  // scores as a perfect string match even though the acoustics were rough.
+  // SpeechRecognition separately reports a confidence (0-1) for how sure it
+  // was about that guess, which we were previously throwing away entirely.
+  // Folding it in punishes exactly the "technically transcribed right, but
+  // only barely" case. A confidence of 0 from the browser generally means
+  // "not provided" rather than "zero confidence" (some engines never
+  // populate it), so that's treated as neutral (1) rather than a penalty.
+  let recognizedWordConfidences = [];
+
+  function scoreAndRender(transcript) {
+    const targetWords = current.answer.replace(/[.,!?;:]/g, "").split(/\s+/).filter(Boolean);
+    const recognizedWords = transcript.split(/\s+/).filter(Boolean);
+    if (recognizedWords.length === 0) {
+      statusEl.textContent = "Didn't catch that — try again.";
+      return;
+    }
+    const aligned = alignWords(targetWords, recognizedWords);
+    aligned.forEach(a => {
+      a.matchPct = Math.round(a.score * 100); // similarity before confidence is folded in
+      if (a.heard == null) { a.confidencePct = null; return; }
+      const idx = recognizedWords.indexOf(a.heard);
+      const conf = idx >= 0 ? recognizedWordConfidences[idx] : 1;
+      const usedConf = (typeof conf === "number" && conf > 0) ? conf : 1;
+      a.confidencePct = idx >= 0 && typeof conf === "number" && conf > 0 ? Math.round(conf * 100) : null;
+      a.score *= usedConf;
+    });
+
+    wordsEl.innerHTML = aligned.map(a => {
+      const pct = Math.round(a.score * 100);
+      let title;
+      if (a.heard == null) {
+        title = `not recognized at all (0%) — click to hear correct pronunciation`;
+      } else {
+        title = `heard: "${a.heard}" — ${pct}% overall (${a.matchPct}% word match` +
+          (a.confidencePct != null ? ` × ${a.confidencePct}% recognizer confidence` : ` — recognizer confidence not reported`) +
+          `) — click to hear correct pronunciation`;
+      }
+      return `<span class="pron-word" data-word="${a.word.replace(/"/g, '&quot;')}" style="background:${scoreColor(a.score)}22;color:${scoreColor(a.score)};border:1px solid ${scoreColor(a.score)};" title="${title.replace(/"/g, '&quot;')}">${a.word}</span>`;
+    }).join(" ");
+
+    const pct = Math.round((aligned.reduce((s, a) => s + a.score, 0) / aligned.length) * 100);
+    statusEl.innerHTML = `Pronunciation score: <span id="pron-score" style="color:${scoreColor(pct / 100)}">${pct}%</span>`;
+    heardEl.textContent = `You said: “${transcript}”`;
+  }
+
+  recognition.onresult = (event) => {
+    lastSpeechTime = Date.now();
+    hasHeardSpeech = true;
+    let interim = "";
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const chunk = event.results[i][0].transcript;
+      if (event.results[i].isFinal) {
+        finalTranscript += chunk + " ";
+        const confidence = event.results[i][0].confidence;
+        chunk.trim().split(/\s+/).filter(Boolean).forEach(() => recognizedWordConfidences.push(confidence));
+      } else {
+        interim += chunk;
+      }
+    }
+    statusEl.textContent = "Listening… " + (finalTranscript + interim);
+  };
+
+  recognition.onerror = (e) => {
+    if (e.error === "no-speech") return; // silence timer handles stopping, not an error
+    statusEl.textContent = `Mic error: ${e.error}`;
+  };
+
+  recognition.onend = () => {
+    clearInterval(silenceTimer);
+    micBtn.classList.remove("listening");
+    micBtn.disabled = false;
+    scoreAndRender(finalTranscript.trim());
+  };
+
+  recognition.start();
+}
+
+// Superseded by the gold tray-chip hint in renderTray() -- underlining
+// whichever word happened to lead the ENGLISH sentence doesn't reliably
+// point at the German answer's actual first slot (German word order doesn't
+// mirror English), so the hint now lives directly on the chip that's
+// actually correct_gap 0, computed from the German answer itself.
+function renderEnglishHint() {
+  englishHintEl.textContent = current.english;
+}
+
+function render() {
+  checked = false;
+  placements = [];
+  extraChips = [];
+  nextExtraNum = 1;
+  selectedChipIndex = null;
+  feedbackEl.innerHTML = "";
+  answerRevealEl.style.display = "none";
+  checkBtn.style.display = "";
+  checkBtn.disabled = false;
+  nextBtn.style.display = "none";
+
+  categoryLabelEl.textContent = current.category.replace(/_/g, " ");
+  renderEnglishHint();
+
+  sentenceEl.innerHTML = "";
+  const skeleton = current.skeleton;
+  const gapCount = skeleton.length + 1;
+  for (let g = 0; g < gapCount; g++) {
+    sentenceEl.appendChild(makeGap(g));
+    if (g < skeleton.length) sentenceEl.appendChild(makeToken(skeleton[g], g));
+  }
+  renderTray();
+  refreshPrepBlanks();
+
+  freetypeInputEl.value = "";
+  freetypeFeedbackEl.style.display = "none";
+  freetypeFeedbackEl.innerHTML = "";
+  renderFreetypeBank();
+  applyModeVisibility();
+}
+
+function applyModeVisibility() {
+  trayEl.style.display = freeTypeMode ? "none" : "";
+  sentenceEl.style.display = freeTypeMode ? "none" : "";
+  resetBoardBtnEl.style.display = freeTypeMode ? "none" : "";
+  freetypePanelEl.style.display = freeTypeMode ? "" : "none";
+  document.getElementById("legend").style.display = freeTypeMode ? "none" : "";
+  freetypeLegendEl.style.display = freeTypeMode ? "" : "none";
+}
+
+freetypeToggleEl.addEventListener("change", () => {
+  freeTypeMode = freetypeToggleEl.checked;
+  applyModeVisibility();
+});
+
+// Relative pronouns ("who/which", "whom/which", "to whom/to which", "whose")
+// introduce a subordinate clause -- recognizing which one fits is a
+// comprehension task, not a case-declension test, so they're fine to show
+// in the word bank. Every other `type: "pronoun"` chip (mir/mich, ihm/ihn,
+// sich, etc.) is a personal/reflexive pronoun whose whole point is testing
+// which case form is correct -- exactly what free-type mode is meant to make
+// the learner produce from scratch, so those stay hidden.
+const RELATIVE_PRONOUN_GLOSSES = new Set(["who/which", "whom/which", "to whom/to which", "whose"]);
+
+function buildHintBank(chips) {
+  const words = [];
+  chips.forEach((chip) => {
+    if (chip.type === "verb") words.push(chip.display);
+    else if (chip.type === "adverb") words.push(chip.display);
+    else if (chip.type === "bare_noun") words.push(chip.display);
+    else if (chip.type === "pronoun") {
+      if (RELATIVE_PRONOUN_GLOSSES.has(chip.display)) words.push(chip.answer);
+      // else: personal/reflexive pronoun -- self-predicted, not shown
+    } else if (chip.type === "noun_phrase") {
+      // article deliberately excluded (der-word, ein-word, and kein-negation
+      // alike) -- declining it correctly is exactly what's being tested
+      chip.adjectives.forEach((adj) => words.push(adj.display));
+      if (chip.noun) words.push(chip.noun);
+    }
+    // negation_nicht, verb_prefix, preposition_req: never shown -- self-predicted
+  });
+  return shuffledIndices(words.length).map((i) => words[i]);
+}
+
+// German main-clause position 1 has no fixed occupant -- subject, a time/
+// place expression, a fronted object, even a whole subordinate clause can
+// all lead. Drag mode flagged this by gold-highlighting whichever tray chip
+// actually starts the answer (see getStartChipIndex()); free-type mode does
+// the same to the matching hint-bank pill when that starting word happens to
+// be visible there. It often isn't -- a fronted object is commonly a
+// personal pronoun ("Mir gefaellt das."), which is deliberately hidden here
+// same as anywhere else -- in that case there's no pill to highlight, so the
+// note below just says so instead of pointing at nothing.
+function getStartWordForHints() {
+  const startIdx = getStartChipIndex();
+  if (startIdx === null) return null;
+  const chip = current.chips[startIdx];
+  if (chip.type === "verb" || chip.type === "adverb" || chip.type === "bare_noun") return chip.display;
+  if (chip.type === "pronoun") return RELATIVE_PRONOUN_GLOSSES.has(chip.display) ? chip.answer : null;
+  if (chip.type === "noun_phrase") {
+    if (chip.article) return null; // article leads and is always hidden
+    if (chip.adjectives && chip.adjectives.length) return chip.adjectives[0].display;
+    return chip.noun || null;
+  }
+  return null;
+}
+
+function renderFreetypeBank() {
+  const words = buildHintBank(current.chips);
+  freetypeBankEl.innerHTML = "";
+  const startWord = getStartWordForHints();
+  let highlighted = false;
+  words.forEach((w) => {
+    const span = document.createElement("span");
+    span.className = "ft-hint-word";
+    span.textContent = w;
+    if (!highlighted && startWord && w === startWord) {
+      span.classList.add("start-hint");
+      highlighted = true;
+    }
+    freetypeBankEl.appendChild(span);
+  });
+  const noteEl = document.getElementById("freetype-start-note");
+  noteEl.textContent = highlighted
+    ? "Gold-highlighted word above starts the sentence -- position 1 isn't always the subject, so this is given free."
+    : "Note: position 1 isn't always the subject (a time/place phrase, a fronted object, or a whole clause can lead) -- whatever starts this one isn't shown in the bank, you'll have to spot it yourself.";
+}
+
+function makeToken(tok, skelIndex) {
+  if (tok.type === "text") {
+    const span = document.createElement("span");
+    span.className = "word";
+    span.textContent = tok.display;
+    return span;
+  }
+  // preposition blank -- build-forward mode: this stays disabled until it's
+  // the next required slot (see refreshPrepBlanks), then locks permanently
+  // once committed via dataset.committed, so it can never be edited again
+  // except by a full "Reset board", matching how a placed chip can never be
+  // picked back up. Committing requires pressing Enter specifically -- NOT
+  // blur, because losing focus happens incidentally all the time (e.g.
+  // clicking a different tray chip to start dragging it), and silently
+  // locking in whatever's typed on an accidental focus change would let a
+  // half-finished guess commit itself without the learner ever deciding to
+  // submit it.
+  const input = document.createElement("input");
+  input.className = "prep-blank";
+  input.dataset.answer = tok.answer;
+  input.dataset.skelIndex = skelIndex;
+  input.placeholder = "…";
+  input.autocomplete = "off";
+  input.spellcheck = false;
+  input.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    if (checked || input.disabled || input.dataset.committed === "1") return;
+    if (input.value.trim()) {
+      input.dataset.committed = "1";
+      input.blur();
+      renderGaps();
+      refreshPrepBlanks();
+    }
+  });
+  const span = document.createElement("span");
+  span.className = "word";
+  span.appendChild(input);
+  return span;
+}
+
+function makeField(chip, fieldKey, className, placeholder, locked) {
+  // typed values are persisted on the chip object itself (chip._typed), not just
+  // left in the DOM -- gap/tray rebuilds recreate these <input> elements from
+  // scratch on every drag-and-drop, so anything only living in the DOM would be
+  // silently lost the next time an unrelated chip gets placed
+  chip._typed = chip._typed || {};
+  const input = document.createElement("input");
+  input.className = className;
+  if (placeholder) input.placeholder = placeholder;
+  input.dataset.field = fieldKey;
+  input.autocomplete = "off";
+  input.spellcheck = false;
+  input.value = chip._typed[fieldKey] || "";
+  // once a REGULAR chip is placed, its typed content locks too -- not just its
+  // position. Otherwise the learner could keep "fixing" spelling/endings after
+  // seeing more of the sentence unfold, which is exactly the mid-sentence
+  // correction build-forward mode is meant to rule out. Self-added extras
+  // (verb_prefix/negation_guess/preposition_guess) never pass `locked` -- they
+  // keep their original fully-free editing, since deciding whether/where one
+  // belongs is a different, ongoing judgment call, not a one-shot answer.
+  input.disabled = !!locked;
+  input.addEventListener("input", () => { chip._typed[fieldKey] = input.value; });
+  return input;
+}
+
+function buildChipBlock(chip, chipIndex, placed) {
+  let el;
+  if (chip.type === "noun_phrase") {
+    el = document.createElement("span");
+    el.className = placed ? "placed-block" : "placed-block tray-block";
+    if (chip.article) {
+      const artCls = { der_word: "field-der", ein_word: "field-ein", negation_kein: "field-neg" }[chip.article.kind];
+      el.appendChild(makeField(chip, "article", "field-input " + artCls, "", placed));
+    }
+    chip.adjectives.forEach((adj, ai) => {
+      const stem = document.createElement("span");
+      stem.className = "field-adj-stem";
+      stem.textContent = adj.display;
+      el.appendChild(stem);
+      el.appendChild(makeField(chip, "adjective" + ai, "field-input field-adj-ending", "", placed));
+    });
+    if (chip.noun) {
+      const noun = document.createElement("span");
+      noun.className = "noun-fixed";
+      noun.textContent = chip.noun;
+      el.appendChild(noun);
+    }
+  } else if (chip.type === "verb") {
+    el = document.createElement("span");
+    el.className = placed ? "placed-block" : "placed-block tray-block";
+    el.appendChild(makeField(chip, "verb", "field-input field-verb", chip.display, placed));
+  } else if (chip.type === "pronoun") {
+    el = document.createElement("span");
+    el.className = placed ? "placed-block" : "placed-block tray-block";
+    el.appendChild(makeField(chip, "pronoun", "field-input field-pronoun", chip.display, placed));
+  } else if (chip.type === "adverb") {
+    // predicative/adverbial comparative or superlative (e.g. "leiser" in
+    // "Musik leiser stellen") -- never takes a case ending, unlike an
+    // attributive adjective in a noun_phrase, so it's just one editable field
+    el = document.createElement("span");
+    el.className = placed ? "placed-block" : "placed-block tray-block";
+    el.appendChild(makeField(chip, "adverb", "field-input field-verb", chip.display, placed));
+  } else if (chip.type === "verb_prefix" || chip.type === "negation_guess" || chip.type === "preposition_guess") {
+    // a blank guess box the learner adds themselves via the "+" button --
+    // showing one automatically (or even just having it appear pre-supplied)
+    // would give away that the sentence needs one at all; deciding whether
+    // one is even needed is part of what's being tested. That freedom is only
+    // for the UNPLACED box sitting in the tray, though -- once dragged into
+    // the sentence, it locks exactly like a regular chip (no more editing the
+    // typed guess, no more removing it via the "x", no more re-dragging it).
+    // Otherwise placing an extra wouldn't really be a commitment at all.
+    el = document.createElement("span");
+    el.className = placed ? "placed-block" : "placed-block tray-block has-remove";
+    const extraFieldCls = { verb_prefix: "field-prefix", negation_guess: "field-negation-guess", preposition_guess: "field-preposition-guess" }[chip.type];
+    el.appendChild(makeField(chip, chip.type, "field-input " + extraFieldCls, "", placed));
+    if (!placed) {
+      const removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "remove-extra";
+      removeBtn.textContent = "×";
+      removeBtn.title = "Remove this box";
+      removeBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (checked) return;
+        extraChips = extraChips.filter(ec => ec.id !== chipIndex);
+        placements = placements.filter(p => p.chipIndex !== chipIndex);
+        renderGaps();
+        renderTray();
+      });
+      el.appendChild(removeBtn);
+    }
+  } else if (chip.type === "bare_noun") {
+    el = document.createElement("span");
+    el.className = placed ? "placed-block noun-chip" : "placed-block tray-block noun-chip";
+    el.textContent = chip.display;
+  } else { // negation_nicht
+    el = document.createElement("span");
+    el.className = placed ? "placed-block nicht-chip" : "placed-block tray-block nicht-chip";
+    el.textContent = "nicht";
+  }
+  el.dataset.chipIndex = chipIndex;
+  // build-forward mode: once ANYTHING is placed -- a regular chip or a
+  // self-added extra alike -- it can never be picked back up or moved. The
+  // only way to correct it is a full "Reset board". Only chips/extras still
+  // sitting unplaced in the tray stay draggable, so they can be placed in
+  // the first place.
+  if (!placed) {
+    el.draggable = true;
+    el.addEventListener("dragstart", (e) => {
+      // a drag gesture that STARTS on a nested input should become normal text-cursor
+      // placement, not a block drag -- cancel it here rather than toggling the block's
+      // `draggable` flag on focus/blur, which raced with the browser's own drag-start
+      // detection and could silently kill the drag for input-heavy blocks (e.g. verb
+      // chips, which are almost entirely one input) even when grabbed validly
+      if (e.target.tagName === "INPUT" || e.target.classList.contains("remove-extra")) { e.preventDefault(); return; }
+      dragChipIndex = chipIndex;
+      el.classList.add("dragging");
+      e.dataTransfer.effectAllowed = "move";
+    });
+    el.addEventListener("dragend", () => { el.classList.remove("dragging"); dragChipIndex = null; });
+
+    // click-to-place: tap a chip to select it, then tap a dot to drop it there --
+    // an alternative to dragging for anyone for whom repeated drag gestures are
+    // physically tiring. Toggling the same chip again deselects it.
+    el.addEventListener("click", (e) => {
+      if (e.target.tagName === "INPUT" || e.target.classList.contains("remove-extra")) return;
+      if (checked) return;
+      selectedChipIndex = selectedChipIndex === chipIndex ? null : chipIndex;
+      updateSelectionVisuals();
+    });
+  }
+
+  return el;
+}
+
+// reflects `selectedChipIndex` in the DOM without a full render -- just a
+// class toggle so in-progress typed input elsewhere on the board isn't
+// disturbed by an unrelated selection change
+function updateSelectionVisuals() {
+  document.querySelectorAll(".tray-block").forEach((el) => {
+    const idx = /^\d+$/.test(el.dataset.chipIndex) ? Number(el.dataset.chipIndex) : el.dataset.chipIndex;
+    el.classList.toggle("selected", selectedChipIndex !== null && idx === selectedChipIndex);
+  });
+  document.querySelectorAll(".insert-dot").forEach((el) => {
+    el.classList.toggle("click-armed", selectedChipIndex !== null);
+  });
+}
+
+function makeGap(gapIndex) {
+  const el = document.createElement("span");
+  el.className = "gap";
+  el.dataset.gap = gapIndex;
+  refreshGap(el, gapIndex);
+  return el;
+}
+
+// Regular chip drops are free-placement now (any gap, any time) -- Check is
+// the only judge of right/wrong. getFrontier() still walks gap-by-gap left
+// to right to find the next not-yet-committed preposition blank, purely so
+// refreshPrepBlanks() knows which single blank should currently be editable;
+// it no longer gates where a regular chip may be dropped (a rejected drop
+// used to mean "you haven't reached this position yet" before even trying,
+// which was itself an unwanted hint that something earlier was unfinished).
+function getFrontier() {
+  const skeleton = current.skeleton;
+  const gapCount = skeleton.length + 1;
+  const byGap = {};
+  current.chips.forEach((c, i) => {
+    if (c.type === "verb_prefix" || c.type === "negation_nicht" || c.type === "preposition_req") return;
+    (byGap[c.correct_gap] = byGap[c.correct_gap] || []).push(i);
+  });
+  const placedRegularCount = {};
+  placements.forEach((p) => {
+    if (typeof p.chipIndex === "string") return;
+    placedRegularCount[p.gap] = (placedRegularCount[p.gap] || 0) + 1;
+  });
+
+  for (let g = 0; g < gapCount; g++) {
+    const required = (byGap[g] || []).length;
+    const placed = placedRegularCount[g] || 0;
+    if (placed < required) return { type: "chip", gap: g, subIndex: placed };
+    if (g < skeleton.length && skeleton[g].type === "preposition") {
+      const input = document.querySelector(`.prep-blank[data-skel-index="${g}"]`);
+      if (input && input.dataset.committed !== "1") return { type: "prep", skelIndex: g };
+    }
+  }
+  return null; // every required regular chip and preposition blank is filled in
+}
+
+// keep every preposition input's enabled state in sync with the frontier --
+// only the live one (if the frontier is currently a preposition) is editable;
+// anything already committed stays permanently disabled
+function refreshPrepBlanks() {
+  const frontier = getFrontier();
+  document.querySelectorAll(".prep-blank").forEach((input) => {
+    if (input.dataset.committed === "1") { input.disabled = true; return; }
+    input.disabled = !(frontier && frontier.type === "prep" && String(frontier.skelIndex) === input.dataset.skelIndex);
+  });
+}
+
+function makeDot(gapIndex, subIndex) {
+  // one visible insertion point per position. Self-added extras (verb_prefix
+  // / negation_guess guess boxes) can still drop at any of these, exactly as
+  // before -- only a REGULAR chip's drop is gated by the build-forward
+  // frontier below, and only on POSITION, never on which chip it is.
+  const dot = document.createElement("span");
+  dot.className = "insert-dot";
+  dot.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    // free placement: the learner can drop anything anywhere and let Check
+    // be the only judge of right/wrong -- previously this dot showed
+    // "blocked" whenever an earlier gap wasn't finished yet, which itself
+    // was an unwanted hint ("something before this is still missing"),
+    // not something you have to discover by actually trying and checking.
+    dot.classList.add("dot-armed");
+  });
+  dot.addEventListener("dragleave", () => { dot.classList.remove("dot-armed", "dot-blocked"); });
+  dot.addEventListener("drop", (e) => {
+    e.preventDefault();
+    dot.classList.remove("dot-armed", "dot-blocked");
+    if (dragChipIndex === null || checked) return;
+    if (typeof dragChipIndex === "string") {
+      insertPlacement(gapIndex, subIndex, dragChipIndex);
+    } else {
+      appendRegularChipToGap(gapIndex, dragChipIndex);
+    }
+    renderGaps();
+    renderTray();
+    refreshPrepBlanks();
+  });
+  dot.addEventListener("click", () => {
+    if (selectedChipIndex === null || checked) return;
+    const chosen = selectedChipIndex;
+    selectedChipIndex = null;
+    if (typeof chosen === "string") {
+      insertPlacement(gapIndex, subIndex, chosen);
+    } else {
+      appendRegularChipToGap(gapIndex, chosen);
+    }
+    renderGaps();
+    renderTray();
+    refreshPrepBlanks();
+  });
+  return dot;
+}
+
+function insertPlacement(gapIndex, subIndex, chipIndex) {
+  placements = placements.filter(p => p.chipIndex !== chipIndex);
+  const here = placements.filter(p => p.gap === gapIndex);
+  const newPlacement = { gap: gapIndex, chipIndex };
+  if (here.length === 0) {
+    placements.push(newPlacement);
+  } else if (subIndex >= here.length) {
+    const idx = placements.indexOf(here[here.length - 1]);
+    placements.splice(idx + 1, 0, newPlacement);
+  } else {
+    const idx = placements.indexOf(here[subIndex]);
+    placements.splice(idx, 0, newPlacement);
+  }
+}
+
+// a regular (non-extra) chip always gets appended after EVERYTHING already
+// in this gap -- including any self-added extra (e.g. a "nicht" the learner
+// deliberately placed ahead of it). Only looking at the last REGULAR chip
+// would insert before a later extra even when the learner clearly built
+// toward that extra first -- build-forward means the truly last thing
+// placed, regardless of whether it was a chip or an extra.
+function appendRegularChipToGap(gapIndex, chipIndex) {
+  placements = placements.filter((p) => p.chipIndex !== chipIndex);
+  const hereAll = placements.filter((p) => p.gap === gapIndex);
+  const newPlacement = { gap: gapIndex, chipIndex };
+  if (hereAll.length === 0) {
+    placements.push(newPlacement);
+  } else {
+    const last = hereAll[hereAll.length - 1];
+    placements.splice(placements.indexOf(last) + 1, 0, newPlacement);
+  }
+}
+
+function refreshGap(el, gapIndex) {
+  el.innerHTML = "";
+  const here = placements.filter(p => p.gap === gapIndex);
+  el.appendChild(makeDot(gapIndex, 0));
+  here.forEach((p, idx) => {
+    el.appendChild(buildChipBlock(chipAt(p.chipIndex), p.chipIndex, true));
+    el.appendChild(makeDot(gapIndex, idx + 1));
+  });
+}
+
+function renderGaps() {
+  document.querySelectorAll(".gap").forEach(el => refreshGap(el, parseInt(el.dataset.gap, 10)));
+  updateSelectionVisuals();
+}
+
+// whichever chip is meant to render at gap 0 -- i.e. actually first in the
+// German answer -- is the lowest-`order` chip among those with correct_gap
+// 0. If no chip has correct_gap 0, the answer starts with fixed skeleton
+// text and no chip needs the hint.
+function getStartChipIndex() {
+  let best = null;
+  current.chips.forEach((chip, i) => {
+    if (chip.type === "verb_prefix" || chip.type === "negation_nicht" || chip.type === "preposition_req") return;
+    if (chip.correct_gap !== 0) return;
+    if (best === null || chip.order < current.chips[best].order) best = i;
+  });
+  return best;
+}
+
+function renderTray() {
+  trayEl.querySelectorAll(".placed-block").forEach(c => c.remove());
+  const startChipIndex = getStartChipIndex();
+  const order = current._trayOrder || current.chips.map((_, i) => i);
+  order.forEach(i => {
+    const chip = current.chips[i];
+    if (chip.type === "verb_prefix" || chip.type === "negation_nicht" || chip.type === "preposition_req") return; // never auto-shown -- see extraChips
+    if (placements.some(p => p.chipIndex === i)) return;
+    const block = buildChipBlock(chip, i, false);
+    if (i === startChipIndex) block.classList.add("start-hint");
+    trayEl.appendChild(block);
+  });
+  extraChips.forEach(ec => {
+    if (placements.some(p => p.chipIndex === ec.id)) return;
+    trayEl.appendChild(buildChipBlock(ec, ec.id, false));
+  });
+}
+
+trayEl.addEventListener("dragover", (e) => { e.preventDefault(); trayEl.classList.add("drag-over"); });
+trayEl.addEventListener("dragleave", () => trayEl.classList.remove("drag-over"));
+trayEl.addEventListener("drop", (e) => {
+  e.preventDefault();
+  trayEl.classList.remove("drag-over");
+  if (dragChipIndex === null || checked) return;
+  placements = placements.filter(p => p.chipIndex !== dragChipIndex);
+  renderGaps();
+  renderTray();
+});
+
+function normalize(s) {
+  return (s || "").trim().toLowerCase().replace(/ß/g, "ss");
+}
+
+function markInput(input, ok) {
+  input.classList.toggle("wrong", !ok);
+}
+
+const CASE_LABELS = { Nom: "nominative", Acc: "accusative", Dat: "dative", Gen: "genitive" };
+const GENDER_LABELS = { Masc: "masculine", Fem: "feminine", Neut: "neuter" };
+
+// standard preposition+der-word contractions. Only some sentences in the
+// corpus happen to have been written with the already-fused spelling (which
+// sets chip.article.fused directly) -- but the fused form is equally valid
+// German any time one of these prepositions immediately precedes a der-word
+// in the right case/gender, regardless of which spelling the source sentence
+// used, so it's computed live here rather than depending on the data.
+const FUSION_TABLE = {
+  "an|Dat|Masc": "am", "an|Dat|Neut": "am", "an|Acc|Neut": "ans",
+  "in|Dat|Masc": "im", "in|Dat|Neut": "im", "in|Acc|Neut": "ins",
+  "zu|Dat|Masc": "zum", "zu|Dat|Neut": "zum", "zu|Dat|Fem": "zur",
+  "von|Dat|Masc": "vom", "von|Dat|Neut": "vom",
+  "bei|Dat|Masc": "beim", "bei|Dat|Neut": "beim",
+};
+function getEffectiveFused(chip) {
+  if (!chip.article || chip.article.kind !== "der_word") return null;
+  if (chip.article.fused) return chip.article.fused;
+  const precedingSkel = current.skeleton[chip.correct_gap - 1];
+  if (!precedingSkel || precedingSkel.type !== "preposition") return null;
+  return FUSION_TABLE[precedingSkel.answer + "|" + chip.article.case + "|" + chip.article.gender] || null;
+}
+function caseGenderLabel(caseVal, gender, number) {
+  const caseLabel = CASE_LABELS[caseVal];
+  if (!caseLabel) return "";
+  if (number === "Plur") return `plural ${caseLabel}`;
+  const genderLabel = GENDER_LABELS[gender];
+  return genderLabel ? `${genderLabel} ${caseLabel}` : caseLabel;
+}
+
+// ---- Free-type mode: type the whole sentence, get it diffed word-by-word ----
+
+// "reflexive" alone (no fixed person) covers sich/mich/dich/uns/euch across
+// different exercises -- kept as its own broad family rather than trying to
+// pin it to one person, since the gloss itself doesn't disambiguate that.
+const PRONOUN_FAMILY_BY_DISPLAY = {
+  "me": "obj_1sg", "myself": "refl_1sg",
+  "you": "obj_2sg", "yourself": "refl_2sg",
+  "him": "obj_3sgm", "him/it": "obj_3sgm",
+  "her": "obj_3sgf", "it": "obj_3sgn",
+  "himself/herself": "refl_3sg", "himself/herself/itself": "refl_3sg",
+  "us": "obj_1pl", "ourselves": "refl_1pl",
+  "you all": "obj_2pl", "yourselves": "refl_2pl",
+  "them": "obj_3pl", "themselves": "refl_3pl",
+  "you (formal)": "obj_2formal",
+  "reflexive": "reflexive_generic",
+};
+
+function ftNorm(s) { return (s || "").toLowerCase().replace(/ß/g, "ss"); }
+
+function ftTokenize(text) {
+  return (text.match(/[A-Za-zÄÖÜäöüßẞ]+|[.,!?;:]/g) || []);
+}
+
+// maps every known-correct SURFACE form appearing anywhere in this exercise's
+// chips to a {lemma, cat} descriptor, used to recognize "right root, wrong
+// ending/case" (yellow) vs. "not related to anything expected here" (red).
+// Words with no entry (nouns, bare_noun/adverb content, fused prepositions
+// like "am"/"zur", punctuation) are invariant -- their own normalized surface
+// doubles as their lemma, so only an exact match counts, never a near-miss.
+//
+// The dict alone only recognizes the ONE correct conjugation/ending that's
+// actually in the answer -- a learner who guesses a DIFFERENT wrong
+// conjugation of the right verb ("bringt" instead of "bringe") wouldn't match
+// anything in it and would wrongly read as a totally unrelated word (red).
+// `stems` fills that gap: every verb/adjective's shared prefix between its
+// infinitive/base form and its correct answer (e.g. "bring" for
+// bringen/bringe, "kaputt" for kaputt/kaputte) -- ANY word starting with that
+// stem, correct answer or not, is recognized as "this verb/adjective, some
+// form of it" for yellow-matching purposes.
+// German infinitives end in "-en" (regular) or occasionally bare "-n"
+// ("tun"); stripping that suffix gives the shared stem across regular
+// conjugations (bring-e/bring-t/bring-en). Strong/irregular verbs whose stem
+// vowel or consonant changes (geben -> gibt, gehen -> ging) won't share this
+// stem with their conjugated forms -- a known gap, not something this
+// suffix-stripping approach can fix without a real conjugation table.
+function ftVerbStem(infinitive) {
+  if (infinitive.endsWith("en")) return infinitive.slice(0, -2);
+  if (infinitive.endsWith("n")) return infinitive.slice(0, -1);
+  return infinitive;
+}
+
+function ftBuildLemmaDict(chips) {
+  const dict = {};
+  const stems = [];
+  chips.forEach((c) => {
+    if (c.type === "verb") {
+      const display = ftNorm(c.display), answer = ftNorm(c.answer);
+      dict[answer] = { lemma: display, cat: "verb" };
+      const stem = ftVerbStem(display);
+      if (stem.length >= 2) stems.push({ stem, lemma: display, cat: "verb" });
+    } else if (c.type === "noun_phrase") {
+      if (c.article) dict[ftNorm(c.article.answer)] = { lemma: ftNorm(c.article.display), cat: "article" };
+      (c.adjectives || []).forEach((a) => {
+        const display = ftNorm(a.display), answer = ftNorm(a.answer);
+        dict[answer] = { lemma: display, cat: "adjective" };
+        // an adjective's answer is always its display stem plus a declension
+        // ending -- the stem itself needs no computation, it's already bare
+        if (display.length >= 2) stems.push({ stem: display, lemma: display, cat: "adjective" });
+      });
+    } else if (c.type === "pronoun") {
+      const fam = PRONOUN_FAMILY_BY_DISPLAY[c.display];
+      if (fam) dict[ftNorm(c.answer)] = { lemma: fam, cat: "pronoun" };
+    } else if (c.type === "verb_prefix" || c.type === "preposition_req") {
+      dict[ftNorm(c.answer)] = { lemma: ftNorm(c.answer), cat: c.type };
+    }
+  });
+  return { dict, stems };
+}
+
+function ftLemmaOf(word, lemmaInfo) {
+  const n = ftNorm(word);
+  if (lemmaInfo.dict[n]) return lemmaInfo.dict[n];
+  for (const s of lemmaInfo.stems) {
+    if (n.startsWith(s.stem)) return { lemma: s.lemma, cat: s.cat };
+  }
+  return { lemma: n, cat: "invariant" };
+}
+
+// longest common subsequence over token arrays (exact normalized match) --
+// this is the "definitely correct AND correctly placed" backbone. Returns
+// the set of matched (userIndex -> expectedIndex) pairs.
+function ftLcsMatch(userToks, expToks) {
+  const n = userToks.length, m = expToks.length;
+  const dp = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      if (ftNorm(userToks[i]) === ftNorm(expToks[j])) {
+        dp[i][j] = 1 + dp[i + 1][j + 1];
+      } else {
+        dp[i][j] = Math.max(dp[i + 1][j], dp[i][j + 1]);
+      }
+    }
+  }
+  const pairs = new Map(); // userIndex -> expectedIndex
+  let i = 0, j = 0;
+  while (i < n && j < m) {
+    if (ftNorm(userToks[i]) === ftNorm(expToks[j]) && dp[i][j] === 1 + dp[i + 1][j + 1]) {
+      pairs.set(i, j);
+      i++; j++;
+    } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+      i++;
+    } else {
+      j++;
+    }
+  }
+  return pairs;
+}
+
+// returns { rendered: [{text, cls}], missing: [expected words never typed], allCorrect }
+function ftGradeAnswer(userText, chips) {
+  const expected = ftTokenize(current.answer);
+  const user = ftTokenize(userText);
+  const dict = ftBuildLemmaDict(chips);
+
+  const matched = ftLcsMatch(user, expected); // exact + in-place backbone
+  const consumedExpected = new Set(matched.values());
+
+  const results = new Array(user.length);
+  matched.forEach((expIdx, userIdx) => { results[userIdx] = { text: user[userIdx], cls: "" }; });
+
+  // remaining unmatched expected indices, in original order, mutable pool
+  let leftoverExpected = expected
+    .map((w, idx) => ({ w, idx }))
+    .filter((e) => !consumedExpected.has(e.idx));
+
+  for (let i = 0; i < user.length; i++) {
+    if (results[i]) continue; // already matched exactly-in-place
+    const word = user[i];
+    const wNorm = ftNorm(word);
+    const wLemma = ftLemmaOf(word, dict);
+
+    let foundIdx = -1, foundCls = "";
+    for (let k = 0; k < leftoverExpected.length; k++) {
+      const cand = leftoverExpected[k];
+      if (ftNorm(cand.w) === wNorm) { foundIdx = k; foundCls = "ft-underline"; break; }
+    }
+    if (foundIdx === -1) {
+      for (let k = 0; k < leftoverExpected.length; k++) {
+        const cand = leftoverExpected[k];
+        if (ftLemmaOf(cand.w, dict).lemma === wLemma.lemma) { foundIdx = k; foundCls = "ft-yellow"; break; }
+      }
+    }
+    if (foundIdx !== -1) {
+      leftoverExpected.splice(foundIdx, 1);
+      results[i] = { text: word, cls: foundCls };
+    } else {
+      results[i] = { text: word, cls: "ft-red" };
+    }
+  }
+
+  const missing = leftoverExpected.map((e) => e.w);
+  const allCorrect = missing.length === 0 && results.every((r) => r.cls === "");
+  return { rendered: results, missing, allCorrect };
+}
+
+function checkFreeTypeAnswer() {
+  if (checked) return;
+  checked = true;
+  const cat = current.category;
+  stats[cat] = stats[cat] || { attempts: 0, correct: 0 };
+
+  const { rendered, missing, allCorrect } = ftGradeAnswer(freetypeInputEl.value, current.chips);
+
+  const html = rendered.map((r) => {
+    const cls = r.cls ? ` ft-word ${r.cls}` : "";
+    return `<span class="${cls.trim()}">${r.text}</span>`;
+  }).join(" ");
+  const missingHtml = missing.length
+    ? `<div style="margin-top:8px;">Missing: ` + missing.map((w) => `<span class="ft-word ft-missing">${w}</span>`).join(" ") + `</div>`
+    : "";
+  const verdict = allCorrect
+    ? '<div class="fb-line fb-ok">Alles richtig!</div>'
+    : '<div class="fb-line fb-bad">Nicht ganz richtig.</div>';
+
+  freetypeFeedbackEl.style.display = "";
+  freetypeFeedbackEl.innerHTML = verdict + `<div style="margin-top:10px;">${html}</div>` + missingHtml;
+
+  stats[cat].attempts++;
+  if (allCorrect) stats[cat].correct++;
+  saveStats(stats);
+
+  answerRevealEl.style.display = "";
+  answerRevealEl.innerHTML =
+    `<div class="answer-row">` +
+      `<span class="answer-text"><b>Answer:</b> ${current.answer}</span>` +
+      `<button class="speak-btn" id="speak-btn" title="Pronounce sentence" aria-label="Pronounce sentence">🔊</button>` +
+      `<button class="mic-btn" id="mic-btn" title="Test your pronunciation" aria-label="Test your pronunciation">🎤</button>` +
+    `</div>` +
+    `<div id="pron-status"></div>` +
+    `<div id="pron-words"></div>` +
+    `<div id="pron-heard-line" class="pron-heard"></div>` +
+    renderTekamoloPanel();
+  document.getElementById("speak-btn").addEventListener("click", () => speakGerman(current.answer));
+  document.getElementById("mic-btn").addEventListener("click", testPronunciation);
+
+  checkBtn.style.display = "none";
+  nextBtn.style.display = "";
+  renderStatsPanel();
+}
+
+function checkAnswer() {
+  if (freeTypeMode) { checkFreeTypeAnswer(); return; }
+  if (checked) return;
+  checked = true;
+  const cat = current.category;
+  stats[cat] = stats[cat] || { attempts: 0, correct: 0 };
+  let allCorrect = true;
+  const lines = [];
+
+  // contracted-preposition prep blanks (e.g. "zu" + "dem" = "zum") get graded
+  // together with their linked article field below, since either the split
+  // form ("zu" ... "dem") or the fused form ("zum" ... empty) is correct --
+  // collect their skeleton indices here so the generic loop skips them.
+  const fusedPrepSkelIndices = new Set();
+  current.chips.forEach(chip => {
+    if (chip.type === "noun_phrase" && getEffectiveFused(chip)) {
+      fusedPrepSkelIndices.add(String(chip.correct_gap - 1));
+    }
+  });
+
+  document.querySelectorAll(".prep-blank").forEach(input => {
+    if (fusedPrepSkelIndices.has(input.dataset.skelIndex)) return;
+    const ok = normalize(input.value) === normalize(input.dataset.answer);
+    markInput(input, ok);
+    if (!ok) allCorrect = false;
+    const explanation = explainPreposition(input.dataset.answer, parseInt(input.dataset.skelIndex, 10));
+    if (explanation) {
+      lines.push(`<div class="fb-line fb-note">↳ “${input.dataset.answer}”: ${explanation}</div>`);
+    }
+  });
+
+  // UNIFIED correct order per gap: every chip participates here, including
+  // verb_prefix/negation_nicht/preposition_req "extra requirements" -- this
+  // is the one true intended sequence. Without this, a self-added nicht/
+  // prefix/preposition guess was only ever checked for being in the right
+  // GAP, never for sitting in the right RELATIVE POSITION among the other
+  // chips sharing that gap (e.g. "nicht" has to come before "so schnell",
+  // not after it, even though both are technically "in the same gap").
+  const correctByGap = {};
+  current.chips.forEach((c, i) => {
+    (correctByGap[c.correct_gap] = correctByGap[c.correct_gap] || []).push(i);
+  });
+  Object.values(correctByGap).forEach(arr => arr.sort((a, b) => current.chips[a].order - current.chips[b].order));
+
+  // a preposition_req chip's `answer` is always the literal, unfused word
+  // ("an", "in", ...) -- but the natural way to actually say it, and what a
+  // learner will reasonably type, is often the fused form with the article
+  // that follows ("am", "ins", ...). Look up the exact fusion for the noun
+  // phrase immediately following this requirement (same FUSION_TABLE used
+  // for the old prep-blank mechanism) so both spellings count as correct.
+  function prepositionFusedForm(reqIdx) {
+    const req = current.chips[reqIdx];
+    if (req.type !== "preposition_req") return null;
+    const following = current.chips.find(c => c.correct_gap === req.correct_gap && c.order === req.order + 1);
+    if (!following || following.type !== "noun_phrase" || !following.article) return null;
+    return FUSION_TABLE[req.answer + "|" + following.article.case + "|" + following.article.gender] || null;
+  }
+
+  // resolve each self-added extra to the specific requirement chip it's
+  // claiming to be (by gap + typed content) -- same matching used for
+  // grading below, done early so the unified placedByGap can use it
+  function resolveExtraMatches(guessType, typedField, requirementIdx) {
+    const placedExtras = placements
+      .filter(p => typeof p.chipIndex === "string")
+      .map(p => ({ gap: p.gap, id: p.chipIndex, ec: chipAt(p.chipIndex) }))
+      .filter(pe => pe.ec && pe.ec.type === guessType)
+      .map(pe => ({ gap: pe.gap, id: pe.id, typed: (pe.ec._typed && pe.ec._typed[typedField]) || "" }));
+    const usedExtraIds = new Set();
+    const matches = new Map(); // extra id -> requirement chip index
+    requirementIdx.forEach((reqIdx) => {
+      const req = current.chips[reqIdx];
+      const fused = guessType === "preposition_guess" ? prepositionFusedForm(reqIdx) : null;
+      const match = placedExtras.find(pe => !usedExtraIds.has(pe.id) && pe.gap === req.correct_gap &&
+        (normalize(pe.typed) === normalize(req.answer) || (fused && normalize(pe.typed) === normalize(fused))));
+      if (match) { usedExtraIds.add(match.id); matches.set(match.id, reqIdx); }
+    });
+    return { placedExtras, matches };
+  }
+
+  const prefixReqIdx = [], nichtReqIdx = [], prepReqIdx = [];
+  current.chips.forEach((c, i) => {
+    if (c.type === "verb_prefix") prefixReqIdx.push(i);
+    if (c.type === "negation_nicht") nichtReqIdx.push(i);
+    if (c.type === "preposition_req") prepReqIdx.push(i);
+  });
+  const prefixRes = resolveExtraMatches("verb_prefix", "verb_prefix", prefixReqIdx);
+  const nichtRes = resolveExtraMatches("negation_guess", "negation_guess", nichtReqIdx);
+  const prepRes = resolveExtraMatches("preposition_guess", "preposition_guess", prepReqIdx);
+  const allExtraMatches = new Map([...prefixRes.matches, ...nichtRes.matches, ...prepRes.matches]);
+  // reqIdx -> the self-added extra box the learner matched to it, so the
+  // noun_phrase grading loop below can tell whether its preposition_req was
+  // answered with the fused form (in which case the article field should be
+  // left blank, not separately re-typed -- same either/or as getEffectiveFused)
+  const prepMatchedExtraByReq = new Map([...prepRes.matches.entries()].map(([extraId, reqIdx]) => [reqIdx, extraId]));
+
+  // UNIFIED placed order per gap, in the TRUE relative sequence the learner
+  // actually built (the `placements` array order already reflects that):
+  // each entry is the chip index it represents -- a regular chip's own
+  // index, or (once resolved) its matched requirement's index for an extra.
+  // An extra that never matched anything doesn't represent any chip and is
+  // simply absent here -- it's graded as "none needed here" separately.
+  const placedByGap = {};
+  placements.forEach(p => {
+    const effectiveIndex = typeof p.chipIndex === "string" ? allExtraMatches.get(p.chipIndex) : p.chipIndex;
+    if (effectiveIndex === undefined) return;
+    (placedByGap[p.gap] = placedByGap[p.gap] || []).push(effectiveIndex);
+  });
+
+  current.chips.forEach((chip, i) => {
+    if (chip.type === "verb_prefix" || chip.type === "negation_nicht" || chip.type === "preposition_req") return; // graded separately -- see below
+    const placement = placements.find(p => p.chipIndex === i);
+    let positionOk = false;
+    if (placement) {
+      const group = correctByGap[chip.correct_gap] || [];
+      const placedGroup = placedByGap[placement.gap] || [];
+      positionOk = placement.gap === chip.correct_gap && placedGroup.indexOf(i) === group.indexOf(i);
+    }
+
+    const blockEl = document.querySelector(`.placed-block[data-chip-index="${i}"]`);
+    if (blockEl) blockEl.classList.toggle("wrong-position", !positionOk);
+    let fieldsOk = true;
+    if (chip.type === "noun_phrase" && blockEl) {
+      if (chip.article) {
+        const art = blockEl.querySelector('[data-field="article"]');
+        let ok;
+        const effFused = getEffectiveFused(chip);
+        // a preposition_req chip (self-added guess box) immediately before
+        // this noun phrase, answered with its fused form ("zur" for "zu" +
+        // this article's case/gender) -- same either/or as the skeleton-based
+        // effFused case below: fused prep + blank article counts as correct,
+        // so the learner isn't forced to also spell out an article that's
+        // already baked into the fused word they just typed.
+        const precedingReqIdx = current.chips.findIndex(c =>
+          c.type === "preposition_req" && c.correct_gap === chip.correct_gap && c.order === chip.order - 1);
+        const reqFused = precedingReqIdx !== -1 ? prepositionFusedForm(precedingReqIdx) : null;
+        const reqExtraId = precedingReqIdx !== -1 ? prepMatchedExtraByReq.get(precedingReqIdx) : undefined;
+        const reqExtraTyped = reqExtraId !== undefined
+          ? ((chipAt(reqExtraId)._typed && chipAt(reqExtraId)._typed.preposition_guess) || "") : null;
+        if (effFused) {
+          // either "zu" + "dem" (split) or "zum" + "" (fused) counts as correct
+          const prepInput = document.querySelector(`.prep-blank[data-skel-index="${chip.correct_gap - 1}"]`);
+          const splitOk = prepInput && normalize(prepInput.value) === normalize(prepInput.dataset.answer)
+            && normalize(art.value) === normalize(chip.article.answer);
+          const fusedOk = prepInput && normalize(prepInput.value) === normalize(effFused)
+            && art.value.trim() === "";
+          ok = splitOk || fusedOk;
+          if (prepInput) {
+            markInput(prepInput, ok);
+            const explanation = explainPreposition(prepInput.dataset.answer, chip.correct_gap - 1);
+            if (explanation) {
+              lines.push(`<div class="fb-line fb-note">↳ “${prepInput.dataset.answer}”: ${explanation}</div>`);
+            }
+          }
+        } else if (reqFused && reqExtraTyped !== null && normalize(reqExtraTyped) === normalize(reqFused)) {
+          ok = art.value.trim() === "";
+        } else {
+          ok = normalize(art.value) === normalize(chip.article.answer);
+        }
+        markInput(art, ok);
+        if (!ok) fieldsOk = false;
+      }
+      chip.adjectives.forEach((adj, ai) => {
+        const inp = blockEl.querySelector(`[data-field="adjective${ai}"]`);
+        const full = normalize(adj.display + inp.value);
+        const ok = full === normalize(adj.answer);
+        markInput(inp, ok);
+        if (!ok) fieldsOk = false;
+      });
+    } else if (chip.type === "verb" && blockEl) {
+      const inp = blockEl.querySelector('[data-field="verb"]');
+      const ok = normalize(inp.value) === normalize(chip.answer);
+      markInput(inp, ok);
+      if (!ok) fieldsOk = false;
+    } else if (chip.type === "pronoun" && blockEl) {
+      const inp = blockEl.querySelector('[data-field="pronoun"]');
+      const ok = normalize(inp.value) === normalize(chip.answer);
+      markInput(inp, ok);
+      if (!ok) fieldsOk = false;
+    } else if (chip.type === "adverb" && blockEl) {
+      const inp = blockEl.querySelector('[data-field="adverb"]');
+      const ok = normalize(inp.value) === normalize(chip.answer);
+      markInput(inp, ok);
+      if (!ok) fieldsOk = false;
+    }
+
+    const ok = positionOk && fieldsOk;
+    const positionOnlyIssue = !positionOk && fieldsOk;
+    if (blockEl) blockEl.classList.toggle("content-ok", positionOnlyIssue);
+    if (!ok) allCorrect = false;
+    const label = chip.type === "noun_phrase"
+      ? (chip.article ? chip.article.answer + " " : "") + chip.adjectives.map(a => a.answer).join(" ") + " " + (chip.noun || "")
+      : chip.answer;
+    let caseNote = "";
+    if (chip.type === "noun_phrase") {
+      const src = chip.article || chip.adjectives[0];
+      if (src) caseNote = caseGenderLabel(src.case, src.gender, src.number);
+    }
+    const fbClass = ok ? 'fb-ok' : positionOnlyIssue ? 'fb-warn' : 'fb-bad';
+    const fbSymbol = ok ? '✓' : positionOnlyIssue ? '⚠' : '✗';
+    lines.push(`<div class="fb-line ${fbClass}">${fbSymbol} ${chip.type}: <b>${label.trim()}</b>` +
+      (caseNote ? ` <span class="fb-case">(${caseNote})</span>` : "") +
+      (positionOnlyIssue ? ` <span class="fb-note">— correct, but wrong slot (something else needs to come first here)</span>` : "") +
+      `</div>`);
+    if (chip.type === "adverb") {
+      const daExplanation = explainDaCompound(chip);
+      if (daExplanation) {
+        lines.push(`<div class="fb-line fb-note">↳ “${chip.answer}”: ${daExplanation}</div>`);
+      }
+    }
+  });
+
+  // separable-prefix, nicht-negation, and preposition requirements are graded
+  // against the learner's own self-added guess box(es), not a pre-placed chip
+  // -- see extraChips above. Content+gap matching already happened above
+  // (resolveExtraMatches); this just reports it AND checks the matched
+  // extra's relative position against the unified correct/placed order, the
+  // same way a regular chip's position is checked -- being in the right gap
+  // isn't enough if it's sitting before/after the wrong neighbor within it.
+  function gradeExtraRequirements(requirementIdx, resolved, label) {
+    const { placedExtras, matches } = resolved;
+    const matchedExtraByReq = new Map([...matches.entries()].map(([extraId, reqIdx]) => [reqIdx, extraId]));
+
+    requirementIdx.forEach((reqIdx) => {
+      const req = current.chips[reqIdx];
+      const extraId = matchedExtraByReq.get(reqIdx);
+      const pe = extraId ? placedExtras.find(p => p.id === extraId) : null;
+      let positionOk = false;
+      if (pe) {
+        const group = correctByGap[req.correct_gap] || [];
+        const placedGroup = placedByGap[pe.gap] || [];
+        positionOk = pe.gap === req.correct_gap && placedGroup.indexOf(reqIdx) === group.indexOf(reqIdx);
+      }
+      const ok = !!pe && positionOk;
+      const positionOnlyIssue = !!pe && !positionOk;
+      if (pe) {
+        const inp = document.querySelector(`.placed-block[data-chip-index="${pe.id}"] input`);
+        if (inp) markInput(inp, ok);
+      }
+      if (!ok) allCorrect = false;
+      const fbClass = ok ? 'fb-ok' : positionOnlyIssue ? 'fb-warn' : 'fb-bad';
+      const fbSymbol = ok ? '✓' : positionOnlyIssue ? '⚠' : '✗';
+      lines.push(`<div class="fb-line ${fbClass}">${fbSymbol} ${label}: <b>${req.answer}</b>` +
+        (positionOnlyIssue ? ` <span class="fb-note">— correct, but wrong slot (something else needs to come first here)</span>` : "") +
+        `</div>`);
+    });
+
+    const matchedExtraIds = new Set(matches.keys());
+    placedExtras.forEach(pe => {
+      if (matchedExtraIds.has(pe.id)) return;
+      // learner added a guess box that doesn't match any requirement (either
+      // there wasn't one here at all, or they've already used one up above)
+      const inp = document.querySelector(`.placed-block[data-chip-index="${pe.id}"] input`);
+      if (inp) markInput(inp, false);
+    });
+    if (placedExtras.some(pe => !matchedExtraIds.has(pe.id))) {
+      allCorrect = false;
+      lines.push(`<div class="fb-line fb-bad">✗ ${label}: <b>(none needed here)</b></div>`);
+    }
+  }
+
+  gradeExtraRequirements(prefixReqIdx, prefixRes, "verb_prefix");
+  gradeExtraRequirements(nichtReqIdx, nichtRes, "negation");
+  gradeExtraRequirements(prepReqIdx, prepRes, "preposition");
+
+  const requiredChipCount = current.chips.filter(c => c.type !== "verb_prefix" && c.type !== "negation_nicht" && c.type !== "preposition_req").length;
+  if (placements.filter(p => typeof p.chipIndex === "number").length < requiredChipCount) allCorrect = false;
+
+  stats[cat].attempts++;
+  if (allCorrect) stats[cat].correct++;
+  saveStats(stats);
+
+  feedbackEl.innerHTML = allCorrect
+    ? '<div class="fb-line fb-ok">Alles richtig!</div>'
+    : '<div class="fb-line fb-bad">Nicht ganz richtig.</div>';
+
+  answerRevealEl.style.display = "";
+  answerRevealEl.innerHTML =
+    `<div class="answer-row">` +
+      `<span class="answer-text"><b>Answer:</b> ${current.answer}</span>` +
+      `<button class="speak-btn" id="speak-btn" title="Pronounce sentence" aria-label="Pronounce sentence">🔊</button>` +
+      `<button class="mic-btn" id="mic-btn" title="Test your pronunciation" aria-label="Test your pronunciation">🎤</button>` +
+    `</div>` +
+    `<div id="pron-status"></div>` +
+    `<div id="pron-words"></div>` +
+    `<div id="pron-heard-line" class="pron-heard"></div>` +
+    renderTekamoloPanel();
+  document.getElementById("speak-btn").addEventListener("click", () => speakGerman(current.answer));
+  document.getElementById("mic-btn").addEventListener("click", testPronunciation);
+
+  checkBtn.style.display = "none";
+  nextBtn.style.display = "";
+  renderStatsPanel();
+}
+
+// ---- Tekamolo (Temporal-Kausal-Modal-Lokal) word-order breakdown ----
+// Best-effort heuristic classifier, not authored per-exercise ground truth --
+// it reconstructs the CORRECT sentence's ordered chunks straight from
+// current.skeleton + current.chips (using correct_gap/order, never the
+// learner's placements), then tags each middle-field chunk by keyword
+// matching. Genuinely ambiguous prepositions (in/an/auf etc. can be time OR
+// place) are resolved by checking whether the following noun is a known
+// time-noun; anything left over is labeled as an object or left unlabeled
+// rather than force-fit into T/K/M/L.
+const TEKAMOLO_TIME_WORDS = new Set(["heute","morgen","gestern","übermorgen","vorgestern","jetzt","bald",
+  "schon","oft","immer","nie","niemals","manchmal","täglich","wöchentlich","monatlich","jährlich",
+  "früh","später","spät","gleich","sofort","danach","davor","dann","damals","neulich","kürzlich",
+  "demnächst","montags","dienstags","mittwochs","donnerstags","freitags","samstags","sonntags"]);
+const TEKAMOLO_TIME_NOUNS = new Set(["woche","tag","monat","jahr","stunde","minute","sekunde","morgen",
+  "abend","nachmittag","vormittag","mittag","nacht","wochenende","sommer","winter","frühling","herbst",
+  "uhr","mal",
+  "montag","dienstag","mittwoch","donnerstag","freitag","samstag","sonntag","sonnabend"]);
+// clock-time number words -- lets "bis halb elf" / "um sieben Uhr" register
+// as Temporal even though "elf"/"sieben" aren't themselves calendar nouns
+const CLOCK_TIME_WORDS = new Set(["eins","zwei","drei","vier","fünf","sechs","sieben","acht","neun",
+  "zehn","elf","zwölf","uhr","halb","viertel","mittag","mitternacht"]);
+// "nach"/"vor" are directional (Lokal) with a bare place name ("nach Berlin",
+// "vor dem Haus") but temporal ("after"/"before") when the object is an
+// event/activity noun -- "nach der Arbeit" = after work, not toward work
+const TEKAMOLO_TEMPORAL_EVENT_NOUNS = new Set(["arbeit","schule","essen","unterricht","training",
+  "meeting","feier","party","konzert","film","kurs","prüfung","sitzung","pause","dienst","urlaub"]);
+const TEKAMOLO_CAUSAL_MARKERS = new Set(["wegen","aufgrund","deshalb","deswegen","daher","darum"]);
+const TEKAMOLO_MODAL_MARKERS = new Set(["mit","ohne","gern","gerne","langsam","schnell","laut","leise",
+  "gut","schlecht","gemeinsam","zusammen","gründlich","sorgfältig","allein","vorsichtig","heimlich"]);
+const TEKAMOLO_LOCAL_PREPS = new Set(["in","an","auf","bei","nach","zu","aus","von","über","unter",
+  "vor","hinter","neben","zwischen","durch","um","entlang","gegenüber"]);
+const TEKAMOLO_SUBORD_CONJ = new Set(["dass","weil","bevor","damit","obwohl","nachdem","wenn","als",
+  "während","bis","seit","seitdem","ob","sodass","indem","sobald","sofern","falls"]);
+
+function chipToAtom(c) {
+  if (c.type === "noun_phrase") {
+    const artAns = c.article ? c.article.answer : "";
+    const adjs = (c.adjectives || []).map(a => a.answer).join(" ");
+    const text = [artAns, adjs, c.noun].filter(Boolean).join(" ");
+    return { text, kind: "noun_phrase" };
+  }
+  if (c.type === "bare_noun") {
+    // German capitalizes every real noun, so a bare_noun chip whose text is
+    // lowercase is almost never an actual noun -- it's a position-only chip
+    // standing in for a subject pronoun, adverb, predicate adjective, or
+    // conjunction (all common after the corpus-wide "unfix everything but
+    // punctuation" pass). Treat those as "adverb" so they don't get wrongly
+    // scored as an "Object (noun phrase)" below; a genuinely bare noun object
+    // (e.g. "Curry", "Steward") stays capitalized and keeps that classification.
+    // a multi-word bare_noun starting with a recognizable article ("die
+    // Rechnung", "den Brief") is a whole object phrase bundled as one chip
+    // (article not separately testable here) -- still a noun_phrase for
+    // classification purposes even though its OWN first letter is lowercase
+    const ARTICLE_WORDS = new Set(["der","die","das","den","dem","des",
+      "ein","eine","einen","einem","einer","eines",
+      "mein","meine","meinen","meinem","meiner","dein","deine","deinen","deinem","deiner",
+      "sein","seine","seinen","seinem","seiner","ihr","ihre","ihren","ihrem","ihrer",
+      "unser","unsere","unseren","unserem","unserer","euer","eure","euren","eurem","eurer",
+      "kein","keine","keinen","keinem","keiner"]);
+    const wordsInChip = c.answer.split(" ");
+    const firstWord = wordsInChip[0].toLowerCase();
+    // "das"/"die"/etc. are ALSO demonstrative/relative pronouns ("that"), not
+    // just articles -- "das zu vermeiden" ("to avoid that") is a zu-infinitive
+    // clause, not an article+noun phrase, even though it starts with "das".
+    // The telltale sign is the classic zu-infinitive shape: "zu" immediately
+    // followed by a word ending in "-en" (the infinitive).
+    const isZuInfinitiveClause = /\bzu\s+\w+en\b/i.test(c.answer);
+    const isRealNoun = !isZuInfinitiveClause &&
+      (/^[A-ZÄÖÜ]/.test(c.answer) || (c.answer.includes(" ") && ARTICLE_WORDS.has(firstWord)));
+    return { text: c.answer, kind: isRealNoun ? "noun_phrase" : "adverb" };
+  }
+  if (c.type === "verb") return { text: c.answer, kind: "verb", infinitive: c.display };
+  if (c.type === "pronoun") return { text: c.answer, kind: "pronoun" };
+  if (c.type === "adverb") return { text: c.answer, kind: "adverb" };
+  if (c.type === "negation_nicht") return { text: c.answer, kind: "negation" };
+  if (c.type === "preposition_req") return { text: c.answer, kind: "prep" };
+  return { text: c.answer || c.display || "", kind: "other" };
+}
+
+// walk gap-by-gap through the CORRECT placement (chips grouped by
+// correct_gap, sorted by order) interleaved with fixed/preposition skeleton
+// tokens, producing a flat ordered list of atoms
+function buildCorrectAtoms() {
+  const chipsByGap = {};
+  current.chips.forEach((c) => {
+    if (c.type === "verb_prefix") return; // optional extra, attaches to the verb cluster
+    (chipsByGap[c.correct_gap] = chipsByGap[c.correct_gap] || []).push(c);
+  });
+  Object.values(chipsByGap).forEach((arr) => arr.sort((a, b) => a.order - b.order));
+
+  const atoms = [];
+  const skeleton = current.skeleton;
+  const gapCount = skeleton.length + 1;
+  for (let g = 0; g < gapCount; g++) {
+    (chipsByGap[g] || []).forEach((c) => atoms.push(chipToAtom(c)));
+    if (g < skeleton.length) {
+      const tok = skeleton[g];
+      atoms.push({ text: tok.answer, kind: tok.type === "preposition" ? "prep" : "text" });
+    }
+  }
+  return atoms.filter((a) => a.text && a.text.trim());
+}
+
+// merge atoms into phrase-level chunks: a preposition swallows the next atom
+// into one PP; a fixed-text chunk starting with a subordinating conjunction
+// becomes its own "clause" chunk; everything else stays atomic
+const isPunctAtom = (t) => t === "." || t === "," || t === "!" || t === "?";
+
+// a noun_phrase chunk only counts as a "governing noun" a later PP could be
+// bound to if it's a genuine object -- not if it's itself a free time
+// expression like "nächste Woche" (which classifies as Temporal, not Object)
+function isTemporalNounPhrase(text) {
+  const w = text.trim().split(/\s+/);
+  const lastWord = w[w.length - 1].toLowerCase();
+  return TEKAMOLO_TIME_NOUNS.has(lastWord);
+}
+
+function buildChunks(atoms) {
+  const chunks = [];
+  for (let i = 0; i < atoms.length; i++) {
+    const a = atoms[i];
+    if (a.kind === "prep" && i + 1 < atoms.length) {
+      let j = i + 1;
+      const parts = [atoms[j].text];
+      const firstFollowerKind = atoms[j].kind;
+      j++;
+      // a preposition's object can be split across several bare fixed-text
+      // skeleton tokens (e.g. "halb" + "elf" for a clock time) -- only chain
+      // those together, and only when the object wasn't already a complete
+      // chip (noun_phrase/pronoun/etc), so we don't run past the PP and
+      // swallow whatever comes next (like the sentence's final period)
+      if (firstFollowerKind === "text") {
+        while (j < atoms.length && atoms[j].kind === "text" && !isPunctAtom(atoms[j].text)) {
+          parts.push(atoms[j].text);
+          j++;
+        }
+      }
+      // a PP sitting directly against a preceding object noun phrase, with
+      // nothing between them, is almost always that noun's own complement
+      // ("einen Termin MIT DEM ARZT" = an appointment WITH THE DOCTOR) --
+      // not a free clause-level adverbial competing for a Tekamolo slot, so
+      // it doesn't get force-classified as Modal/Lokal/etc below
+      const prevChunk = chunks[chunks.length - 1];
+      const prevIsGoverningNoun = chunks.length > 1 && prevChunk && prevChunk.kind === "noun_phrase" && !isTemporalNounPhrase(prevChunk.text);
+      const boundToNoun = prevIsGoverningNoun ? prevChunk.text : null;
+      chunks.push({ text: a.text + " " + parts.join(" "), kind: "PP", boundToNoun });
+      i = j - 1;
+      continue;
+    }
+    if (a.kind === "text") {
+      const firstWord = a.text.trim().split(/\s+/)[0].toLowerCase();
+      if (TEKAMOLO_SUBORD_CONJ.has(firstWord)) {
+        chunks.push({ text: a.text, kind: "clause" });
+        continue;
+      }
+    }
+    chunks.push(a);
+  }
+  return chunks;
+}
+
+function classifyChunk(chunk) {
+  const words = chunk.text.trim().split(/\s+/);
+  const first = words[0].toLowerCase();
+  if (chunk.kind === "clause") return "Subordinate clause (has its own verb-final rules, not Tekamolo)";
+  if (chunk.kind === "negation") return "Negation (nicht) — placed right before the constituent it negates";
+  // "darum"/"daran"/etc. are lexically ambiguous: they can be a free causal
+  // connector ("therefore") OR a da-compound standing in for a verb's fixed
+  // preposition ("sich kümmern DARUM" = to take care of it). Inside a
+  // da_compound exercise it's always the latter -- the whole category exists
+  // to drill that pattern -- so don't let it fall through to the Kausal
+  // wordlist check below just because the SAME word can mean "therefore"
+  // elsewhere.
+  if (current.category === "da_compound" && words.length === 1 &&
+      /^da(r)?(an|auf|über|in|unter|von|vor|zu|bei|mit|gegen|nach|für|um|durch)$/.test(first)) {
+    return "Da-compound (refers to the clause/idea that follows, not a free cause/reason marker)";
+  }
+  // check PP structure BEFORE the bare-conjunction wordlist -- words like
+  // "bis"/"seit"/"während" are ambiguous (conjunction when introducing a
+  // full clause, preposition when heading a PP like "bis halb elf"); if the
+  // chunker already parsed it as a preposition + object, trust that over the
+  // wordlist, since a real clause never got merged into a PP chunk
+  if (chunk.kind === "PP") {
+    const prep = first;
+    const nounWord = words[words.length - 1].toLowerCase();
+    // time expressions win even when bound to a noun ("der Termin am Montag"
+    // is still meaningfully temporal) -- but a plain accompaniment/manner PP
+    // bound to the preceding noun isn't a free Tekamolo adverbial at all
+    if (TEKAMOLO_TIME_NOUNS.has(nounWord) || TEKAMOLO_TIME_WORDS.has(nounWord) || CLOCK_TIME_WORDS.has(nounWord)) return "Temporal (time)";
+    if (chunk.boundToNoun) return `Bound to "${chunk.boundToNoun}" (that noun's own complement, not freely ordered)`;
+    if ((prep === "nach" || prep === "vor") && TEKAMOLO_TEMPORAL_EVENT_NOUNS.has(nounWord)) return "Temporal (time)";
+    if (TEKAMOLO_CAUSAL_MARKERS.has(prep)) return "Kausal (cause/reason)";
+    if (prep === "mit" || prep === "ohne") return "Modal (manner/accompaniment)";
+    if (TEKAMOLO_LOCAL_PREPS.has(prep)) return "Lokal (place)";
+    return "Prepositional phrase (other)";
+  }
+  if (TEKAMOLO_SUBORD_CONJ.has(first)) return "Subordinate clause";
+  if (TEKAMOLO_TIME_WORDS.has(first)) return "Temporal (time)";
+  if (TEKAMOLO_CAUSAL_MARKERS.has(first)) return "Kausal (cause/reason)";
+  if (TEKAMOLO_MODAL_MARKERS.has(first)) return "Modal (manner)";
+  if (chunk.kind === "pronoun") return "Pronoun object (ordered before Tekamolo adverbials)";
+  if (chunk.kind === "noun_phrase") {
+    // bare (preposition-less) time expressions are common and still count as
+    // Temporal, e.g. "nächste Woche", "jeden Tag", "diese Woche"
+    const lastWord = words[words.length - 1].toLowerCase();
+    if (TEKAMOLO_TIME_NOUNS.has(lastWord)) return "Temporal (time)";
+    return "Object (noun phrase)";
+  }
+  if (chunk.kind === "adverb") {
+    if (/\bzu\s+\w+en\b/i.test(chunk.text)) return "Zu-infinitive clause (object of the verb)";
+    return "Adverb (uncategorized)";
+  }
+  return null;
+}
+
+// verbs that, when they appear in their own bare infinitive form as the LAST
+// member of a final-position verb cluster, are "governing" the verb(s) before
+// them (passive werden, perfect/modal auxiliaries, causative lassen) -- that's
+// why they sit last: the cluster reads inner-verb-first, governor-last
+const CLUSTER_GOVERNING_INFINITIVES = new Set([
+  "werden", "haben", "sein", "lassen",
+  "können", "müssen", "dürfen", "sollen", "wollen", "mögen"
+]);
+
+// "worden" is werden's own irregular, passive-Perfekt-only form -- normally a
+// verb's participle would be "geworden", but when werden is ITSELF the
+// auxiliary of a passive Perfekt ("ist gestohlen worden" = has been stolen),
+// it drops the "ge-" and uses "worden" instead. It still governs the
+// participle before it and sits last, exactly like the bare-infinitive case.
+const CLUSTER_GOVERNING_IRREGULAR_FORMS = { worden: "werden" };
+
+// a run of 2+ consecutive verb chunks in final position is a "verb cluster" --
+// explain the fixed internal order instead of labeling each one identically
+function buildClusterRow(cluster) {
+  const text = cluster.map((c) => c.text).join(" ");
+  if (cluster.length === 1) {
+    return { text, role: "Verb (final position / verb cluster)" };
+  }
+  const last = cluster[cluster.length - 1];
+  const lastLower = last.text.toLowerCase();
+  const isBareInfinitive = last.infinitive && lastLower === last.infinitive.toLowerCase();
+  const irregularFor = CLUSTER_GOVERNING_IRREGULAR_FORMS[lastLower];
+  const isIrregularGovernor = irregularFor && last.infinitive && last.infinitive.toLowerCase() === irregularFor;
+  if ((isBareInfinitive && CLUSTER_GOVERNING_INFINITIVES.has(lastLower)) || isIrregularGovernor) {
+    const governed = cluster.slice(0, -1).map((c) => c.text).join(" ");
+    const note = isIrregularGovernor
+      ? ` -- ${last.text} is werden's special passive-Perfekt form (not "geworden"), and still governs it, sitting last`
+      : ` -- ${last.text} governs it and always sits last in the cluster`;
+    return {
+      text,
+      role: `Verb (final position / verb cluster): "${governed}" comes before "${last.text}"${note}`,
+    };
+  }
+  // a "zu"-infinitive clause governed by a control verb (versprechen,
+  // versuchen, planen, vergessen...) can stay "in construction" instead of
+  // being extraposed after a comma -- in that coherent form, the zu-infinitive
+  // stays put and the governing verb's own participle/conjugated form moves to
+  // the very end, same governor-last logic as the auxiliary case above, just
+  // with a "zu ..." chunk being governed instead of a bare participle
+  const hasZuInfinitive = cluster.slice(0, -1).some((c) => {
+    if (!c.text.toLowerCase().startsWith("zu ")) return false;
+    const bare = c.text.slice(3).toLowerCase();
+    return c.infinitive && bare === c.infinitive.toLowerCase();
+  });
+  const lastIsConjugatedForm = last.infinitive && last.text.toLowerCase() !== last.infinitive.toLowerCase();
+  if (hasZuInfinitive && lastIsConjugatedForm) {
+    const governed = cluster.slice(0, -1).map((c) => c.text).join(" ");
+    return {
+      text,
+      role: `Verb (final position / verb cluster): "${governed}" comes before "${last.text}" -- ${last.text} governs that zu-infinitive clause and sits last (coherent construction, no comma needed)`,
+    };
+  }
+  return { text, role: "Verb (final position / verb cluster)" };
+}
+
+// build the HTML for the analysis panel, or return "" if there's nothing
+// worth showing (e.g. sentence has no middle-field adverbials at all)
+function renderTekamoloPanel() {
+  // prefer the real, sentence-specific LLM-generated explanation (built and
+  // verified over the whole corpus) over the old generic-label heuristic
+  // below -- it explains WHY a chunk sits where it does (e.g. definite vs
+  // indefinite object ordering) instead of just tagging it "Object".
+  // EXPLANATIONS is keyed by string id since it's a JS object literal.
+  const real = typeof EXPLANATIONS !== "undefined" ? EXPLANATIONS[String(current.id)] : null;
+  if (real && real.length) {
+    // quick-glance case/gender badges pulled straight from the real chip
+    // data (not parsed out of the prose) so you don't have to read the
+    // whole paragraph just to see what case a noun phrase is in
+    const GENDER_LABEL = { Masc: "Masculine", Fem: "Feminine", Neut: "Neuter", Plur: "Plural" };
+    const CASE_LABEL = { Nom: "Nominative", Acc: "Accusative", Dat: "Dative", Gen: "Genitive" };
+    function chunkBadges(chunkText) {
+      const words = chunkText.match(/[a-zA-ZäöüßÄÖÜ]+/g) || [];
+      const badges = [];
+      current.chips.forEach(c => {
+        if (c.type !== "noun_phrase" || !c.noun || !words.includes(c.noun)) return;
+        // article-less noun phrases (mass nouns like "viel Platz", or a
+        // bare noun object like "zwei Zimmern") carry their gender/case/
+        // number directly on the chip instead of on an article -- fall back
+        // to those so they still get a badge instead of being silently
+        // skipped just for lacking an article to fill in.
+        const source = c.article || c;
+        if (!source.gender || !source.case) return;
+        const gender = source.number === "Plur" ? "Plur" : source.gender;
+        const genderLabel = GENDER_LABEL[gender], caseLabel = CASE_LABEL[source.case];
+        if (genderLabel && caseLabel) badges.push(`${genderLabel} · ${caseLabel}`);
+      });
+      return badges;
+    }
+    return `<div id="tekamolo-panel">` +
+      `<div id="tekamolo-title">Word order in the answer</div>` +
+      real.map(r => {
+        const badges = chunkBadges(r.chunk);
+        const badgeHtml = badges.length ? `<div class="tek-badges">${badges.map(b => `<span class="tek-badge">${b}</span>`).join("")}</div>` : "";
+        return `<div class="tek-row tek-real"><span class="tek-chunk">${r.chunk}${badgeHtml}</span><span class="tek-role">${r.reason}</span></div>`;
+      }).join("") +
+      `</div>`;
+  }
+
+  const atoms = buildCorrectAtoms();
+  const chunks = buildChunks(atoms);
+
+  // locate subject (first non-verb chunk) and finite verb (first verb chunk)
+  // so both get excluded from the T-K-M-L breakdown -- they're not part of
+  // the Tekamolo-ordered middle field
+  let verbSeen = false;
+  let finiteVerbInfinitive = null;
+  const rows = [];
+  for (let i = 0; i < chunks.length; i++) {
+    const c = chunks[i];
+    if (c.kind === "verb") {
+      if (!verbSeen) {
+        rows.push({ text: c.text, role: "Finite verb (position 2)" });
+        verbSeen = true;
+        finiteVerbInfinitive = (c.infinitive || c.text).toLowerCase();
+        continue;
+      }
+      const cluster = [c];
+      while (i + 1 < chunks.length && chunks[i + 1].kind === "verb") {
+        i++;
+        cluster.push(chunks[i]);
+      }
+      rows.push(buildClusterRow(cluster));
+      continue;
+    }
+    if (i === 0) { rows.push({ text: c.text, role: "Subject" }); continue; }
+    const role = classifyChunk(c);
+    if (role) rows.push({ text: c.text, role });
+  }
+
+  // with a copula (sein/werden/bleiben) as the finite verb, any trailing
+  // chunks that never got a real Tekamolo/pronoun classification are the
+  // predicate complement -- it always sits in final position, the same slot
+  // a verb would occupy, which is exactly why a temporal adverbial like
+  // "heute" can sit in front of it but never after. Merge that trailing run
+  // into one row instead of leaving each word wrongly labeled "Object".
+  const COPULA_INFINITIVES = new Set(["sein", "werden", "bleiben"]);
+  if (finiteVerbInfinitive && COPULA_INFINITIVES.has(finiteVerbInfinitive)) {
+    let cut = rows.length;
+    for (let i = rows.length - 1; i >= 0; i--) {
+      const r = rows[i];
+      if (r.role === "Subject" || r.role === "Finite verb (position 2)" || r.role.startsWith("Verb (final position")) break;
+      if (r.role === "Adverb (uncategorized)" || r.role === "Object (noun phrase)") {
+        cut = i;
+      } else {
+        break; // hit a genuine Tekamolo-classified row -- stop, don't sweep past it
+      }
+    }
+    if (cut < rows.length) {
+      const merged = rows.slice(cut);
+      rows.splice(cut, rows.length - cut, {
+        text: merged.map(r => r.text).join(" "),
+        role: "Predicate complement (final position, like the verb) -- with sein/werden/bleiben, this sits in the same slot a verb would occupy",
+      });
+    }
+  }
+
+  const middleFieldRows = rows.filter(r => r.role !== "Subject" && r.role !== "Finite verb (position 2)" && !r.role.startsWith("Verb (final position"));
+  // an explained verb cluster (e.g. "korrigiert" before governing "werden") is
+  // worth showing on its own, even with no other Tekamolo adverbials present
+  const hasExplainedCluster = rows.some(r => r.role.startsWith("Verb (final position") && r.role.includes(":"));
+  if (middleFieldRows.length < 2 && !hasExplainedCluster) return ""; // nothing meaningfully ordered to compare
+
+  const roleClass = (role) => {
+    if (role.startsWith("Temporal")) return "tek-t";
+    if (role.startsWith("Kausal")) return "tek-k";
+    if (role.startsWith("Modal")) return "tek-m";
+    if (role.startsWith("Lokal")) return "tek-l";
+    if (role.startsWith("Negation")) return "tek-neg";
+    return "tek-other";
+  };
+
+  return `<div id="tekamolo-panel">` +
+    `<div id="tekamolo-title">Word order in the answer (best-effort analysis)</div>` +
+    rows.map(r => `<div class="tek-row ${roleClass(r.role)}"><span class="tek-chunk">${r.text}</span><span class="tek-role">${r.role}</span></div>`).join("") +
+    `</div>`;
+}
+
+function shuffledIndices(n) {
+  const arr = Array.from({ length: n }, (_, i) => i);
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function nextExercise() {
+  current = pickExercise();
+  // tray display order only -- a fresh shuffle per exercise so the learner
+  // can't just drag blocks left-to-right in the order they're shown and get
+  // the correct sentence order for free. Stored on the exercise object so it
+  // stays stable across "Reset board" (which re-renders the same exercise)
+  // and doesn't jitter chips around every render() call.
+  current._trayOrder = shuffledIndices(current.chips.length);
+  render();
+}
+
+checkBtn.addEventListener("click", checkAnswer);
+nextBtn.addEventListener("click", nextExercise);
+document.getElementById("reset-board-btn").addEventListener("click", render);
+
+// #pron-words gets recreated every time checkAnswer() rebuilds
+// answerRevealEl's innerHTML, so delegate from a stable ancestor instead of
+// attaching a fresh listener (which would just stack duplicates) each time
+document.body.addEventListener("click", (e) => {
+  const wordEl = e.target.closest(".pron-word");
+  if (wordEl) speakGerman(wordEl.dataset.word);
+});
+
+document.getElementById("add-prefix-btn").addEventListener("click", () => {
+  if (checked) return;
+  extraChips.push({ id: "x" + (nextExtraNum++), type: "verb_prefix", _typed: {} });
+  renderTray();
+});
+
+document.getElementById("add-negation-btn").addEventListener("click", () => {
+  if (checked) return;
+  extraChips.push({ id: "x" + (nextExtraNum++), type: "negation_guess", _typed: {} });
+  renderTray();
+});
+
+document.getElementById("add-prep-btn").addEventListener("click", () => {
+  if (checked) return;
+  extraChips.push({ id: "x" + (nextExtraNum++), type: "preposition_guess", _typed: {} });
+  renderTray();
+});
+
+// remembers the last text input the learner focused, so an umlaut button
+// click (which itself steals focus) still knows where to insert the character
+let lastFocusedInput = null;
+document.addEventListener("focusin", (e) => {
+  // TEXTAREA included so the free-type sentence box (not just the old
+  // per-field <input> boxes) can receive umlaut-bar clicks and Alt-shortcuts
+  if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") lastFocusedInput = e.target;
+});
+
+function insertAtCaret(el, ch) {
+  const start = el.selectionStart ?? el.value.length;
+  const end = el.selectionEnd ?? el.value.length;
+  el.value = el.value.slice(0, start) + ch + el.value.slice(end);
+  const caret = start + ch.length;
+  el.focus();
+  el.setSelectionRange(caret, caret);
+  el.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+document.querySelectorAll(".umlaut-btn").forEach(btn => {
+  btn.addEventListener("click", (e) => {
+    if (!lastFocusedInput || checked) return;
+    const ch = e.shiftKey ? btn.dataset.upper : btn.dataset.lower;
+    insertAtCaret(lastFocusedInput, ch);
+  });
+});
+
+// Alt+A/O/U/S -> ae/oe/ue/ss umlauts (Alt+Shift+ for the capital form),
+// without needing to reach for the mouse -- e.code is used instead of e.key
+// since some OSes/layouts turn Alt+letter into an entirely different
+// character in e.key (e.g. macOS Option+A -> "å"), which e.code never does.
+const UMLAUT_SHORTCUT_KEYS = {
+  KeyA: { lower: "ä", upper: "Ä" },
+  KeyO: { lower: "ö", upper: "Ö" },
+  KeyU: { lower: "ü", upper: "Ü" },
+  KeyS: { lower: "ß", upper: "SS" },
+};
+document.addEventListener("keydown", (e) => {
+  if (!e.altKey || e.ctrlKey || e.metaKey) return;
+  const mapping = UMLAUT_SHORTCUT_KEYS[e.code];
+  if (!mapping || !lastFocusedInput || checked) return;
+  e.preventDefault();
+  insertAtCaret(lastFocusedInput, e.shiftKey ? mapping.upper : mapping.lower);
+});
+
+document.getElementById("stats-toggle").addEventListener("click", () => {
+  const panel = document.getElementById("stats-panel");
+  const isHidden = getComputedStyle(panel).display === "none";
+  panel.style.display = isHidden ? "block" : "none";
+  renderStatsPanel();
+});
+document.getElementById("reset-stats").addEventListener("click", () => {
+  if (confirm("Reset all progress stats?")) { stats = {}; saveStats(stats); renderStatsPanel(); }
+});
+
+function renderStatsPanel() {
+  const panel = document.getElementById("stats-panel");
+  if (getComputedStyle(panel).display === "none") return;
+  let rows = categories.map(cat => {
+    const s = stats[cat] || { attempts: 0, correct: 0 };
+    const acc = s.attempts ? Math.round(100 * s.correct / s.attempts) : null;
+    return { cat, attempts: s.attempts, acc };
+  });
+  rows.sort((a, b) => (a.acc === null ? -1 : a.acc) - (b.acc === null ? -1 : b.acc));
+  panel.innerHTML = "<table><tr><th>Category</th><th>Attempts</th><th>Accuracy</th></tr>" +
+    rows.map(r => `<tr><td>${r.cat.replace(/_/g, " ")}</td><td>${r.attempts}</td><td>${r.acc === null ? "—" : r.acc + "%"}</td></tr>`).join("") +
+    "</table>";
+}
+
+nextExercise();
+</script>
+</body>
+</html>
